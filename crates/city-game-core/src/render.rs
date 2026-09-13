@@ -65,14 +65,27 @@ impl GameWorldProjection {
         let (origin_lon, origin_lat) = if positions.is_empty() {
             (0.0, 0.0)
         } else {
-            let min_lon = positions.iter().map(|position| position[0]).fold(f64::INFINITY, f64::min);
-            let max_lon = positions.iter().map(|position| position[0]).fold(f64::NEG_INFINITY, f64::max);
-            let min_lat = positions.iter().map(|position| position[1]).fold(f64::INFINITY, f64::min);
-            let max_lat = positions.iter().map(|position| position[1]).fold(f64::NEG_INFINITY, f64::max);
+            let min_lon = positions
+                .iter()
+                .map(|position| position[0])
+                .fold(f64::INFINITY, f64::min);
+            let max_lon = positions
+                .iter()
+                .map(|position| position[0])
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_lat = positions
+                .iter()
+                .map(|position| position[1])
+                .fold(f64::INFINITY, f64::min);
+            let max_lat = positions
+                .iter()
+                .map(|position| position[1])
+                .fold(f64::NEG_INFINITY, f64::max);
             ((min_lon + max_lon) * 0.5, (min_lat + max_lat) * 0.5)
         };
         let latitude_meters_per_degree = 111_320.0;
-        let longitude_meters_per_degree = latitude_meters_per_degree * origin_lat.to_radians().cos();
+        let longitude_meters_per_degree =
+            latitude_meters_per_degree * origin_lat.to_radians().cos();
         Self {
             origin_lon,
             origin_lat,
@@ -88,7 +101,10 @@ impl GameWorldProjection {
     }
 }
 
-pub fn build_render_frame(scenario: &CityScenario, aspect: f32) -> Result<RendererFrame, CameraError> {
+pub fn build_render_frame(
+    scenario: &CityScenario,
+    aspect: f32,
+) -> Result<RendererFrame, CameraError> {
     let projection = GameWorldProjection::from_scenario(scenario);
     let mut nodes = Vec::new();
     let mut max_extent = 0.0_f32;
@@ -97,9 +113,19 @@ pub fn build_render_frame(scenario: &CityScenario, aspect: f32) -> Result<Render
         update_extent(feature, projection, &mut max_extent);
         match feature.kind {
             ScenarioFeatureKind::Road => append_road_nodes(feature, projection, &mut nodes),
-            ScenarioFeatureKind::Building => append_area_node(feature, projection, &mut nodes, 0xb5aa98, building_height(feature)),
-            ScenarioFeatureKind::Water => append_area_node(feature, projection, &mut nodes, 0x5b9bd5, 0.15),
-            ScenarioFeatureKind::LandUse => append_area_node(feature, projection, &mut nodes, 0x7fa36b, 0.08),
+            ScenarioFeatureKind::Building => append_area_node(
+                feature,
+                projection,
+                &mut nodes,
+                0xb5aa98,
+                building_height(feature),
+            ),
+            ScenarioFeatureKind::Water => {
+                append_area_node(feature, projection, &mut nodes, 0x5b9bd5, 0.15)
+            }
+            ScenarioFeatureKind::LandUse => {
+                append_area_node(feature, projection, &mut nodes, 0x7fa36b, 0.08)
+            }
             ScenarioFeatureKind::Transit | ScenarioFeatureKind::Other => {}
         }
     }
@@ -214,10 +240,15 @@ struct ProjectedBounds {
     max_z: f32,
 }
 
-fn projected_bounds(geometry: &Geometry, projection: GameWorldProjection) -> Option<ProjectedBounds> {
+fn projected_bounds(
+    geometry: &Geometry,
+    projection: GameWorldProjection,
+) -> Option<ProjectedBounds> {
     let mut positions = Vec::new();
     collect_positions(geometry, &mut positions);
-    let mut projected = positions.into_iter().map(|position| projection.project(position));
+    let mut projected = positions
+        .into_iter()
+        .map(|position| projection.project(position));
     let [first_x, first_z] = projected.next()?;
     let mut bounds = ProjectedBounds {
         min_x: first_x,
@@ -244,13 +275,11 @@ fn road_width(feature: &ScenarioFeature) -> f32 {
 }
 
 fn building_height(feature: &ScenarioFeature) -> f32 {
-    if let Some(height) = feature.tags.get("height").and_then(|value| {
-        value
-            .trim_end_matches('m')
-            .trim()
-            .parse::<f32>()
-            .ok()
-    }) {
+    if let Some(height) = feature
+        .tags
+        .get("height")
+        .and_then(|value| value.trim_end_matches('m').trim().parse::<f32>().ok())
+    {
         return height.clamp(2.5, 400.0);
     }
     if let Some(levels) = feature
@@ -322,7 +351,7 @@ fn collect_positions(geometry: &Geometry, output: &mut Vec<[f64; 2]>) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use crate::{ExternalRevision, ScenarioProvenance, SCENARIO_SCHEMA_VERSION};
+    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
 
     use super::*;
 
