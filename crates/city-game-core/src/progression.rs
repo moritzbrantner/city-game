@@ -45,7 +45,11 @@ impl ProgressionState {
         metrics: &BTreeMap<String, i64>,
     ) -> Vec<String> {
         let mut ordered = rules.iter().collect::<Vec<_>>();
-        ordered.sort_by(|left, right| left.id.cmp(&right.id).then(left.unlocks.cmp(&right.unlocks)));
+        ordered.sort_by(|left, right| {
+            left.id
+                .cmp(&right.id)
+                .then(left.unlocks.cmp(&right.unlocks))
+        });
         let mut newly_unlocked = Vec::new();
 
         loop {
@@ -54,7 +58,11 @@ impl ProgressionState {
                 .iter()
                 .copied()
                 .filter(|rule| !snapshot.contains(&rule.unlocks))
-                .filter(|rule| rule.all.iter().all(|requirement| requirement.is_met(metrics, &snapshot)))
+                .filter(|rule| {
+                    rule.all
+                        .iter()
+                        .all(|requirement| requirement.is_met(metrics, &snapshot))
+                })
                 .map(|rule| rule.unlocks.clone())
                 .collect::<Vec<_>>();
             wave.sort();
