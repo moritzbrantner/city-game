@@ -8,4 +8,5 @@ repository.workspace = true
 
 [dependencies]
 city-game-core = { path = "../city-game-core" }
+serde.workspace = true
 serde-json.workspace = true
