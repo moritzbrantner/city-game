@@ -6,14 +6,14 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Check out pull-request head
+      - name: Check out exact head
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -29,35 +29,22 @@ jobs:
         with:
           bun-version: 1.3.14
 
-      - name: Format Rust for bootstrap evidence
-        run: cargo fmt --all
+      - name: Check Rust formatting
+        run: cargo fmt --all --check
 
-      - name: Lint Rust
-        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - name: Lint Rust with locked dependencies
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 
-      - name: Test Rust
-        run: cargo test --workspace --all-features
+      - name: Test Rust with locked dependencies
+        run: cargo test --locked --workspace --all-features
 
       - name: Generate browser renderer frame
-        run: cargo run -p city-game-cli -- frame fixtures/demo-scenario.json web/public/demo-frame.json
+        run: cargo run --locked -p city-game-cli -- frame fixtures/demo-scenario.json web/public/demo-frame.json
 
-      - name: Install browser dependencies
+      - name: Install locked browser dependencies
         working-directory: web
-        run: bun install
+        run: bun install --frozen-lockfile
 
       - name: Build browser proof
         working-directory: web
         run: bun run build
-
-      - name: Commit canonical bootstrap outputs
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        env:
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock web/bun.lock crates/city-game-core/src crates/city-game-cli/src
-          if ! git diff --cached --quiet; then
-            git commit -m "chore: lock foundation dependencies"
-            git push origin "HEAD:${HEAD_REF}"
-          fi
