@@ -1,0 +1,20 @@
+[package]
+name = "city-game-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+geo-core.workspace = true
+geo-io-osm.workspace = true
+serde.workspace = true
+serde-json.workspace = true
+sha2.workspace = true
+three-d-camera.workspace = true
+three-d-core.workspace = true
+
+[dev-dependencies]
+osmpbfreader.workspace = true
+protobuf.workspace = true

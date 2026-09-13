@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "provenance": {
+    "sourceFormat": "osm-pbf",
+    "sourceName": "synthetic-foundation.osm.pbf",
+    "sourceSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "parser": {
+      "repository": "https://github.com/moritzbrantner/geo-analysis",
+      "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
+    }
+  },
+  "features": [
+    {
+      "sourceId": "way/10",
+      "kind": "road",
+      "tags": {
+        "highway": "residential",
+        "name": "Foundation Street"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[8.4000, 49.0000], [8.4015, 49.0008], [8.4030, 49.0004]]
+      }
+    },
+    {
+      "sourceId": "way/20",
+      "kind": "building",
+      "tags": {
+        "building": "apartments",
+        "building:levels": "4"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[8.4010, 49.0002], [8.4014, 49.0002], [8.4014, 49.0005], [8.4010, 49.0005], [8.4010, 49.0002]]]
+      }
+    },
+    {
+      "sourceId": "way/30",
+      "kind": "water",
+      "tags": {
+        "natural": "water"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[8.4020, 48.9995], [8.4030, 48.9995], [8.4030, 48.9998], [8.4020, 48.9998], [8.4020, 48.9995]]]
+      }
+    }
+  ]
+}

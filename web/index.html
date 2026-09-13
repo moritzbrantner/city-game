@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>city-game foundation</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <section class="scene" aria-label="Imported city scenario">
+        <canvas id="scene"></canvas>
+      </section>
+      <aside>
+        <p class="eyebrow">Foundation proof</p>
+        <h1>Real geography, game-owned world</h1>
+        <p>
+          This browser surface consumes a renderer frame emitted by <code>city-game-core</code> and draws it through
+          <code>@moritzbrantner/three-d-renderer</code>. OSM parsing and generic camera/renderer mechanics remain outside
+          the game repository.
+        </p>
+        <dl>
+          <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
+          <div><dt>Objects</dt><dd id="objects">—</dd></div>
+          <div><dt>Renderer revision</dt><dd>6a18cb2</dd></div>
+        </dl>
+      </aside>
+    </main>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
