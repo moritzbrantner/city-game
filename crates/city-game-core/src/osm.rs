@@ -1,14 +1,14 @@
 use std::fmt::Write as _;
 
 use geo_io_osm::{
-    collect_osm_pbf_bytes, CollectOsmBytesOptions, IndexOptions, OsmElementType, OsmFeature,
-    OsmFilterSpec, OsmTags,
+    CollectOsmBytesOptions, IndexOptions, OsmElementType, OsmFeature, OsmFilterSpec, OsmTags,
+    collect_osm_pbf_bytes,
 };
 use sha2::{Digest, Sha256};
 
 use crate::{
-    CityScenario, ExternalRevision, ScenarioFeature, ScenarioFeatureKind, ScenarioProvenance,
-    SCENARIO_SCHEMA_VERSION,
+    CityScenario, ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioFeature, ScenarioFeatureKind,
+    ScenarioProvenance,
 };
 
 pub const GEO_ANALYSIS_REVISION: &str = "c4df63a023f2183d700a9a28071d732d345e7c25";
@@ -192,9 +192,11 @@ mod tests {
         assert!(first.features.iter().any(|feature| {
             feature.source_id == "way/20" && feature.kind == ScenarioFeatureKind::Building
         }));
-        assert!(first
-            .features
-            .windows(2)
-            .all(|pair| pair[0].source_id <= pair[1].source_id));
+        assert!(
+            first
+                .features
+                .windows(2)
+                .all(|pair| pair[0].source_id <= pair[1].source_id)
+        );
     }
 }
