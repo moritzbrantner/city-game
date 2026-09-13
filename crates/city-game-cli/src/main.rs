@@ -3,7 +3,7 @@ use std::error::Error;
 use std::fs;
 use std::path::Path;
 
-use city_game_core::{build_render_frame, import_osm_pbf_bytes, CityScenario};
+use city_game_core::{CityScenario, build_render_frame, import_osm_pbf_bytes};
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().collect::<Vec<_>>();
