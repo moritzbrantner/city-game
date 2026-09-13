@@ -52,22 +52,12 @@ pub struct CityScenario {
     pub features: Vec<ScenarioFeature>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CityWorld {
     pub tick: u64,
     pub metrics: BTreeMap<String, i64>,
     pub progression: ProgressionState,
-}
-
-impl Default for CityWorld {
-    fn default() -> Self {
-        Self {
-            tick: 0,
-            metrics: BTreeMap::new(),
-            progression: ProgressionState::default(),
-        }
-    }
 }
 
 impl CityWorld {
