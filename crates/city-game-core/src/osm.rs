@@ -1,5 +1,6 @@
 use std::fmt::Write as _;
 
+use geo_core::Geometry;
 use geo_io_osm::{
     CollectOsmBytesOptions, IndexOptions, OsmElementType, OsmFeature, OsmFilterSpec, OsmTags,
     collect_osm_pbf_bytes,
@@ -14,6 +15,8 @@ use crate::{
 
 pub const GEO_ANALYSIS_REVISION: &str = "c4df63a023f2183d700a9a28071d732d345e7c25";
 pub const OSM_PARSER_REPOSITORY: &str = "https://github.com/moritzbrantner/geo-analysis";
+
+const LATITUDE_METERS_PER_DEGREE: f64 = 111_320.0;
 
 pub fn import_osm_pbf_bytes(
     source_name: impl Into<String>,
@@ -115,21 +118,28 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
                 .and_then(|value| parse_max_speed_kph(value)),
             geometry: feature.geometry,
         }),
-        ImportedKind::Building => NormalizedFeature::Building(ScenarioBuilding {
-            id,
-            source_id,
-            use_kind: building_use(&feature.tags),
-            name,
-            levels: feature
+        ImportedKind::Building => {
+            let levels = feature
                 .tags
                 .get("building:levels")
-                .and_then(|value| parse_positive_u16(value)),
-            height_m: feature
+                .and_then(|value| parse_positive_u16(value));
+            let height_m = feature
                 .tags
                 .get("height")
-                .and_then(|value| parse_height_m(value)),
-            footprint: feature.geometry,
-        }),
+                .and_then(|value| parse_height_m(value));
+            let gross_floor_area_m2 =
+                gross_floor_area_m2(&feature.geometry, levels, height_m);
+            NormalizedFeature::Building(ScenarioBuilding {
+                id,
+                source_id,
+                use_kind: building_use(&feature.tags),
+                name,
+                levels,
+                height_m,
+                gross_floor_area_m2,
+                footprint: feature.geometry,
+            })
+        }
         ImportedKind::Water => NormalizedFeature::Water(ScenarioWater {
             id,
             source_id,
@@ -324,6 +334,71 @@ fn parse_height_m(value: &str) -> Option<f32> {
         .map(|height| height.clamp(0.5, 1_000.0))
 }
 
+fn gross_floor_area_m2(geometry: &Geometry, levels: Option<u16>, height_m: Option<f32>) -> u64 {
+    let footprint_area = geometry_area_m2(geometry);
+    let levels = levels.unwrap_or_else(|| {
+        height_m
+            .map(|height| ((height / 3.0).round() as u16).max(1))
+            .unwrap_or(1)
+    });
+    footprint_area.saturating_mul(u64::from(levels))
+}
+
+fn geometry_area_m2(geometry: &Geometry) -> u64 {
+    let area = match geometry {
+        Geometry::Polygon { coordinates } => polygon_area_m2(coordinates),
+        Geometry::MultiPolygon { coordinates } => coordinates.iter().map(|polygon| polygon_area_m2(polygon)).sum(),
+        Geometry::GeometryCollection { geometries } => geometries
+            .iter()
+            .map(geometry_area_m2)
+            .fold(0_u64, u64::saturating_add) as f64,
+        Geometry::Point { .. }
+        | Geometry::MultiPoint { .. }
+        | Geometry::LineString { .. }
+        | Geometry::MultiLineString { .. } => 0.0,
+    };
+    if area.is_finite() && area > 0.0 {
+        area.round().min(u64::MAX as f64) as u64
+    } else {
+        0
+    }
+}
+
+fn polygon_area_m2(rings: &[Vec<[f64; 2]>]) -> f64 {
+    let Some(outer) = rings.first() else {
+        return 0.0;
+    };
+    let outer_area = ring_area_m2(outer).abs();
+    let holes = rings
+        .iter()
+        .skip(1)
+        .map(|ring| ring_area_m2(ring).abs())
+        .sum::<f64>();
+    (outer_area - holes).max(0.0)
+}
+
+fn ring_area_m2(ring: &[[f64; 2]]) -> f64 {
+    if ring.len() < 3 {
+        return 0.0;
+    }
+    let origin_lon = ring[0][0];
+    let origin_lat = ring.iter().map(|position| position[1]).sum::<f64>() / ring.len() as f64;
+    let longitude_meters_per_degree = LATITUDE_METERS_PER_DEGREE * origin_lat.to_radians().cos();
+    let project = |position: [f64; 2]| {
+        [
+            (position[0] - origin_lon) * longitude_meters_per_degree,
+            (position[1] - origin_lat) * LATITUDE_METERS_PER_DEGREE,
+        ]
+    };
+    let mut twice_area = 0.0;
+    for index in 0..ring.len() {
+        let current = project(ring[index]);
+        let next = project(ring[(index + 1) % ring.len()]);
+        twice_area += current[0] * next[1] - next[0] * current[1];
+    }
+    twice_area * 0.5
+}
+
 fn sha256_hex(input: &[u8]) -> String {
     let digest = Sha256::digest(input);
     let mut encoded = String::with_capacity(digest.len() * 2);
@@ -443,11 +518,13 @@ mod tests {
         assert_eq!(first.buildings.len(), 1);
         assert_eq!(first.buildings[0].use_kind, BuildingUse::Residential);
         assert_eq!(first.buildings[0].levels, Some(4));
+        assert!(first.buildings[0].gross_floor_area_m2 > 0);
 
         let encoded = serde_json::to_string(&first).unwrap();
         assert!(!encoded.contains("\"tags\""));
         assert!(!encoded.contains("\"highway\""));
         assert!(!encoded.contains("\"building:levels\""));
+        assert!(encoded.contains("grossFloorAreaM2"));
     }
 
     #[test]
