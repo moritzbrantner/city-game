@@ -1,22 +1,23 @@
 # city-game roadmap
 
-## 0. Foundation proof — current
+## 0. Foundation proof — complete
 
 - Consume `moenarch-geo-io-osm` for in-memory `.osm.pbf` parsing.
-- Normalize OSM objects into stable `CityScenario` features while retaining tags and geometry.
-- Preserve source SHA-256 and exact upstream parser revision.
-- Keep mutable `CityWorld` / `CitySave` state separate from imported source state.
+- Transform parsed OSM objects into a stable, game-native `CityScenario`; OSM tags stop at the import boundary.
+- Preserve source SHA-256, exact upstream parser revision, and per-entity source references for provenance/reimport.
+- Keep mutable `CityWorld` / `CitySave` state separate from immutable imported scenario state.
 - Establish deterministic, data-driven progression rules.
 - Project scenario coordinates into a game-local world and emit the reusable `3d-lab` renderer contract using `three-d-camera` for camera matrices.
 - Build a browser proof with `@moritzbrantner/three-d-renderer` rather than a local Three.js renderer.
 
-## 1. Playable city skeleton
+## 1. Playable city skeleton — current
 
-- Treat imported roads/building footprints/water/land use as the initial scenario, not a background image.
-- Add player-owned road and zoning changes as an overlay on immutable source provenance.
+- Treat canonical imported roads/building footprints/water/land use as the initial scenario, not a background image or runtime OSM model.
+- Add player-owned road and zoning changes as a deterministic overlay on immutable scenario state; redevelopment suppresses/replaces scenario entities without rewriting the import.
+- Save/resume and scenario restart operate on the game-native scenario/world format, never OSM.
 - Establish deterministic fixed-step city time.
 - Add population households/jobs at the level needed to drive zoning demand without prematurely simulating every citizen.
-- Add save/resume and scenario restart semantics.
+- Add interactive planning controls after the authoritative command/overlay boundary is proven.
 
 ## 2. Economy and land
 
