@@ -103,7 +103,10 @@ impl CityRuleset {
             return Err(RulesetError::UnsupportedSchemaVersion(self.schema_version));
         }
 
-        self.population.config.validate().map_err(RulesetError::Population)?;
+        self.population
+            .config
+            .validate()
+            .map_err(RulesetError::Population)?;
 
         let mut ids = BTreeSet::new();
         for rule in &self.progression.config.rules {
@@ -155,19 +158,28 @@ mod tests {
     #[test]
     fn toggling_a_system_preserves_its_typed_configuration() {
         let mut ruleset = CityRuleset::default();
-        ruleset.population.config.residential_floor_area_m2_per_household = 72;
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 72;
 
         ruleset.set_status(RuleSystem::Population, RuleStatus::Disabled);
         assert!(!ruleset.is_enabled(RuleSystem::Population));
         assert_eq!(
-            ruleset.population.config.residential_floor_area_m2_per_household,
+            ruleset
+                .population
+                .config
+                .residential_floor_area_m2_per_household,
             72
         );
 
         ruleset.set_status(RuleSystem::Population, RuleStatus::Enabled);
         assert!(ruleset.is_enabled(RuleSystem::Population));
         assert_eq!(
-            ruleset.population.config.residential_floor_area_m2_per_household,
+            ruleset
+                .population
+                .config
+                .residential_floor_area_m2_per_household,
             72
         );
         assert_eq!(ruleset.validate(), Ok(()));
@@ -193,7 +205,10 @@ mod tests {
     fn invalid_typed_configuration_fails_even_while_disabled() {
         let mut ruleset = CityRuleset::default();
         ruleset.population.status = RuleStatus::Disabled;
-        ruleset.population.config.residential_floor_area_m2_per_household = 0;
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 0;
 
         assert!(matches!(
             ruleset.validate(),
