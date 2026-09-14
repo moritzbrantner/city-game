@@ -570,7 +570,11 @@ mod tests {
         );
         let encoded = serde_json::to_string(&scenario_collision).unwrap();
         let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
-        assert!(error.to_string().contains("reserved by the imported scenario"));
+        assert!(
+            error
+                .to_string()
+                .contains("reserved by the imported scenario")
+        );
 
         let mut invalid_geometry = CitySave::new(scenario());
         invalid_geometry.world.planning.player_roads.insert(
@@ -586,7 +590,11 @@ mod tests {
         );
         let encoded = serde_json::to_string(&invalid_geometry).unwrap();
         let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
-        assert!(error.to_string().contains("must contain at least one line segment"));
+        assert!(
+            error
+                .to_string()
+                .contains("must contain at least one line segment")
+        );
     }
 
     #[test]
