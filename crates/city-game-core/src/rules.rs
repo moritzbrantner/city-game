@@ -105,7 +105,10 @@ impl fmt::Display for RulesetError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnsupportedSchemaVersion(version) => {
-                write!(formatter, "unsupported city ruleset schema version {version}")
+                write!(
+                    formatter,
+                    "unsupported city ruleset schema version {version}"
+                )
             }
             Self::InvalidProgressionRule => {
                 formatter.write_str("progression rule id and unlock target must be non-empty")
