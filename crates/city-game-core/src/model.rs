@@ -3,10 +3,12 @@ use std::collections::BTreeMap;
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
-use crate::{CityPlanningOverlay, CityTimeConfig, ProgressionState};
+use crate::{
+    CityPlanningOverlay, CityTimeConfig, PopulationRules, PopulationState, ProgressionState,
+};
 
-pub const SCENARIO_SCHEMA_VERSION: u32 = 2;
-pub const SAVE_SCHEMA_VERSION: u32 = 3;
+pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
+pub const SAVE_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +118,7 @@ pub struct ScenarioBuilding {
     pub levels: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_m: Option<f32>,
+    pub gross_floor_area_m2: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,6 +179,7 @@ pub struct CityWorld {
     pub metrics: BTreeMap<String, i64>,
     pub progression: ProgressionState,
     pub planning: CityPlanningOverlay,
+    pub population: PopulationState,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -183,18 +187,25 @@ pub struct CityWorld {
 pub struct CitySave {
     pub schema_version: u32,
     pub scenario: CityScenario,
-    #[serde(default)]
     pub time: CityTimeConfig,
+    pub population_rules: PopulationRules,
     pub world: CityWorld,
 }
 
 impl CitySave {
     pub fn new(scenario: CityScenario) -> Self {
+        let population_rules = PopulationRules::default();
+        let population = PopulationState::baseline_from_scenario(&scenario, population_rules)
+            .expect("canonical scenario capacity fits aggregate population state");
         Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
             time: CityTimeConfig::default(),
-            world: CityWorld::default(),
+            population_rules,
+            world: CityWorld {
+                population,
+                ..CityWorld::default()
+            },
         }
     }
 }
@@ -224,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn save_roundtrip_preserves_game_scenario_provenance_and_clock() {
+    fn save_roundtrip_preserves_game_scenario_provenance_clock_and_population_rules() {
         let mut save = CitySave::new(scenario());
         save.advance_tick().unwrap();
 
@@ -235,6 +246,7 @@ mod tests {
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
         assert_eq!(decoded.time, CityTimeConfig::default());
+        assert_eq!(decoded.population_rules, PopulationRules::default());
         assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
     }
