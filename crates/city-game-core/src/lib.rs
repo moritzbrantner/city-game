@@ -22,5 +22,5 @@ pub use planning::{
 pub use progression::{ProgressionRule, ProgressionState, Requirement};
 pub use render::{
     RendererCamera, RendererFrame, RendererGeometry, RendererSceneNode, RendererTransform,
-    THREE_D_LAB_REVISION, build_render_frame,
+    THREE_D_LAB_REVISION, build_render_frame, build_save_render_frame,
 };
