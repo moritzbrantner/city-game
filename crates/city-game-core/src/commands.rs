@@ -89,7 +89,7 @@ impl CitySave {
                 if !self.ruleset.is_enabled(RuleSystem::Progression) {
                     return Err(CityCommandError::SystemDisabled(RuleSystem::Progression));
                 }
-                let rules = self.ruleset.progression_rules.clone();
+                let rules = self.ruleset.progression.config.rules.clone();
                 let newly_unlocked = self.world.progression.evaluate(&rules, &self.world.metrics);
                 Ok(CityCommandOutcome::ProgressionEvaluated { newly_unlocked })
             }
@@ -108,7 +108,7 @@ impl CitySave {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CityScenario, ExternalRevision, PopulationRules, ProgressionRule, Requirement, RuleStatus,
+        CityScenario, ExternalRevision, ProgressionRule, Requirement, RuleStatus,
         SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
     };
 
@@ -154,7 +154,7 @@ mod tests {
     fn progression_rules_are_configuration_and_evaluate_through_command_gateway() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.world.metrics.insert("population".to_owned(), 1_000);
-        save.ruleset.progression_rules = vec![ProgressionRule {
+        save.ruleset.progression.config.rules = vec![ProgressionRule {
             id: "services".to_owned(),
             unlocks: "basic-services".to_owned(),
             all: vec![Requirement::MetricAtLeast {
@@ -187,14 +187,11 @@ mod tests {
     }
 
     #[test]
-    fn restart_does_not_require_population_rules_when_population_is_disabled() {
+    fn restart_does_not_seed_population_when_population_is_disabled() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Population, RuleStatus::Disabled);
-        save.population_rules = PopulationRules {
-            residential_floor_area_m2_per_household: 0,
-            ..PopulationRules::default()
-        };
+        save.ruleset.population.config.residential_floor_area_m2_per_household = 72;
         save.world.tick = 7;
 
         assert_eq!(
@@ -202,5 +199,9 @@ mod tests {
             CityCommandOutcome::Restarted
         );
         assert_eq!(save.world, CityWorld::default());
+        assert_eq!(
+            save.ruleset.population.config.residential_floor_area_m2_per_household,
+            72
+        );
     }
 }
