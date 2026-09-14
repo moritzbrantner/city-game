@@ -230,8 +230,7 @@ struct CitySaveWire {
     scenario: CityScenario,
     #[serde(default)]
     time: CityTimeConfig,
-    #[serde(default)]
-    ruleset: CityRuleset,
+    ruleset: Option<CityRuleset>,
     #[serde(default)]
     population_rules: PopulationRules,
     world: CityWorld,
@@ -249,7 +248,16 @@ impl<'de> Deserialize<'de> for CitySave {
                 wire.schema_version
             )));
         }
-        wire.ruleset.validate().map_err(D::Error::custom)?;
+        let ruleset = match wire.ruleset {
+            Some(ruleset) => ruleset,
+            None if wire.schema_version < SAVE_SCHEMA_VERSION => CityRuleset::default(),
+            None => {
+                return Err(D::Error::custom(
+                    "city save schema version 5 requires an explicit ruleset",
+                ));
+            }
+        };
+        ruleset.validate().map_err(D::Error::custom)?;
         wire.world
             .planning
             .validate_against_scenario(&wire.scenario)
@@ -259,7 +267,7 @@ impl<'de> Deserialize<'de> for CitySave {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario: wire.scenario,
             time: wire.time,
-            ruleset: wire.ruleset,
+            ruleset,
             population_rules: wire.population_rules,
             world: wire.world,
         })
@@ -338,5 +346,16 @@ mod tests {
 
         assert_eq!(decoded.schema_version, SAVE_SCHEMA_VERSION);
         assert_eq!(decoded.ruleset, CityRuleset::default());
+    }
+
+    #[test]
+    fn version_five_save_requires_explicit_ruleset() {
+        let save = CitySave::new(scenario()).unwrap();
+        let mut encoded = serde_json::to_value(save).unwrap();
+        encoded.as_object_mut().unwrap().remove("ruleset");
+
+        let error = serde_json::from_value::<CitySave>(encoded).unwrap_err();
+
+        assert!(error.to_string().contains("requires an explicit ruleset"));
     }
 }
