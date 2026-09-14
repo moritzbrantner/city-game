@@ -288,21 +288,15 @@ impl<'de> Deserialize<'de> for CitySave {
                 wire.schema_version
             )));
         }
-        wire.scenario.validate_schema().map_err(D::Error::custom)?;
-        wire.time.validate().map_err(D::Error::custom)?;
-        wire.ruleset.validate().map_err(D::Error::custom)?;
         wire.world
             .planning
             .validate_against_scenario(&wire.scenario)
             .map_err(D::Error::custom)?;
 
-        Ok(Self {
-            schema_version: wire.schema_version,
-            scenario: wire.scenario,
-            time: wire.time,
-            ruleset: wire.ruleset,
-            world: wire.world,
-        })
+        let mut save = Self::new_with_config(wire.scenario, wire.time, wire.ruleset)
+            .map_err(D::Error::custom)?;
+        save.world = wire.world;
+        Ok(save)
     }
 }
 
@@ -373,7 +367,8 @@ mod tests {
     #[test]
     fn save_roundtrip_preserves_current_scenario_clock_and_ruleset() {
         let mut save = CitySave::new(scenario()).unwrap();
-        save.advance_tick().unwrap();
+        save.execute(crate::CityCommand::AdvanceFixedSteps { steps: 1 })
+            .unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
