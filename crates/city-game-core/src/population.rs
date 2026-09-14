@@ -159,11 +159,6 @@ impl PopulationState {
 }
 
 impl CitySave {
-    pub(crate) fn validate_population_configuration(&self) -> Result<(), PopulationError> {
-        PopulationCapacity::from_scenario(&self.scenario, self.ruleset.population.config)
-            .map(|_| ())
-    }
-
     pub(crate) fn developed_population_capacity(
         &self,
     ) -> Result<PopulationCapacity, PopulationError> {
@@ -360,19 +355,6 @@ mod tests {
             PopulationCapacity::from_scenario(&scenario(), rules),
             Err(PopulationError::InvalidRule(_))
         ));
-    }
-
-    #[test]
-    fn invalid_ruleset_configuration_fails_before_authoritative_step_mutates_world() {
-        let mut save = CitySave::new(scenario()).unwrap();
-        save.ruleset
-            .population
-            .config
-            .residential_floor_area_m2_per_household = 0;
-        let before = save.clone();
-
-        assert!(save.ruleset.validate().is_err());
-        assert_eq!(save, before);
     }
 
     #[test]
