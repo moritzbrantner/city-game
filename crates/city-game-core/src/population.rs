@@ -159,28 +159,31 @@ impl PopulationState {
 }
 
 impl CitySave {
-    pub fn validate_population_configuration(&self) -> Result<(), PopulationError> {
-        PopulationCapacity::from_scenario(&self.scenario, self.population_rules).map(|_| ())
+    pub(crate) fn validate_population_configuration(&self) -> Result<(), PopulationError> {
+        PopulationCapacity::from_scenario(&self.scenario, self.ruleset.population.config).map(|_| ())
     }
 
-    pub fn developed_population_capacity(&self) -> Result<PopulationCapacity, PopulationError> {
+    pub(crate) fn developed_population_capacity(
+        &self,
+    ) -> Result<PopulationCapacity, PopulationError> {
         capacity_from_buildings(
             self.scenario
                 .buildings
                 .iter()
                 .filter(|building| !self.world.planning.is_suppressed(&building.id)),
-            self.population_rules,
+            self.ruleset.population.config,
         )
     }
 
-    pub fn rci_demand(&self) -> Result<RciDemand, PopulationError> {
-        self.world
-            .population
-            .demand(self.developed_population_capacity()?, self.population_rules)
+    pub(crate) fn rci_demand(&self) -> Result<RciDemand, PopulationError> {
+        self.world.population.demand(
+            self.developed_population_capacity()?,
+            self.ruleset.population.config,
+        )
     }
 
     pub(crate) fn scenario_population_baseline(&self) -> Result<PopulationState, PopulationError> {
-        PopulationState::baseline_from_scenario(&self.scenario, self.population_rules)
+        PopulationState::baseline_from_scenario(&self.scenario, self.ruleset.population.config)
     }
 }
 
@@ -250,8 +253,8 @@ mod tests {
     use geo_core::Geometry;
 
     use crate::{
-        CityPlanningOverlay, CityWorld, ExternalRevision, PlanningCommand, SCENARIO_SCHEMA_VERSION,
-        ScenarioProvenance,
+        CityPlanningOverlay, CitySaveError, CityWorld, ExternalRevision, PlanningCommand,
+        SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
     };
 
     use super::*;
@@ -320,14 +323,16 @@ mod tests {
 
     #[test]
     fn redevelopment_reduces_capacity_without_deleting_occupants() {
-        let rules = PopulationRules::default();
-        let population = PopulationState::baseline_from_scenario(&scenario(), rules).unwrap();
+        let population = PopulationState::baseline_from_scenario(
+            &scenario(),
+            PopulationRules::default(),
+        )
+        .unwrap();
         let mut save = CitySave {
             schema_version: crate::SAVE_SCHEMA_VERSION,
             scenario: scenario(),
             time: crate::CityTimeConfig::default(),
             ruleset: crate::CityRuleset::default(),
-            population_rules: rules,
             world: CityWorld {
                 population,
                 planning: CityPlanningOverlay::default(),
@@ -359,26 +364,12 @@ mod tests {
     }
 
     #[test]
-    fn invalid_deserialized_rules_fail_before_authoritative_step_mutates_world() {
+    fn invalid_ruleset_configuration_fails_before_authoritative_step_mutates_world() {
         let mut save = CitySave::new(scenario()).unwrap();
-        save.population_rules = serde_json::from_str(
-            r#"{
-                "residentialFloorAreaM2PerHousehold": 0,
-                "commercialFloorAreaM2PerJob": 35,
-                "industrialFloorAreaM2PerJob": 60,
-                "initialOccupancyBasisPoints": 9000,
-                "targetOccupancyBasisPoints": 10001
-            }"#,
-        )
-        .unwrap();
+        save.ruleset.population.config.residential_floor_area_m2_per_household = 0;
         let before = save.clone();
 
-        assert!(matches!(
-            save.advance_fixed_steps(1),
-            Err(crate::CitySaveError::Population(
-                PopulationError::InvalidRule(_)
-            ))
-        ));
+        assert!(save.ruleset.validate().is_err());
         assert_eq!(save, before);
     }
 
@@ -396,8 +387,6 @@ mod tests {
         let population = PopulationState::baseline_from_scenario(&overflowing, rules);
         assert_eq!(population, Err(PopulationError::CapacityOverflow));
 
-        // `CitySave::new` uses the default divisor of 90; enough max-sized
-        // residential buildings still exceed u64 aggregate capacity.
         overflowing.buildings = (0..100)
             .map(|index| {
                 building(
@@ -409,7 +398,7 @@ mod tests {
             .collect();
         assert_eq!(
             CitySave::new(overflowing),
-            Err(PopulationError::CapacityOverflow)
+            Err(CitySaveError::Population(PopulationError::CapacityOverflow))
         );
     }
 }
