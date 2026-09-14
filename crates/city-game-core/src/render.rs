@@ -678,6 +678,7 @@ mod tests {
                 name: None,
                 levels: Some(4),
                 height_m: None,
+                gross_floor_area_m2: 3_600,
             }],
             water: Vec::new(),
             land_use_areas: Vec::new(),
@@ -703,7 +704,7 @@ mod tests {
 
     #[test]
     fn save_frame_projects_effective_planning_overlay() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.apply_planning(PlanningCommand::SuppressScenarioEntity {
             id: "imported/way/10".to_owned(),
         })

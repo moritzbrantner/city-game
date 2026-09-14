@@ -7,7 +7,7 @@
 - **`moenarch-geo-io-osm` / `geo-analysis` owns OSM parsing.** `city-game` consumes parser-level OSM features; it does not implement PBF/XML parsing.
 - **`city-game` owns the game import model.** OSM is converted once into a typed, canonical `CityScenario` containing only semantics intentionally used by the simulation. Raw OSM tag maps do not become runtime state or save data.
 - **`maps` is a peer consumer of the geo/OSM foundation.** `maps` renders realistic maps; `city-game` renders a game world. Neither repository is the other's parsing layer.
-- **`3d-lab` owns generic camera and browser-renderer mechanics.** `city-game` owns game-world projection, scene composition, simulation, progression, planning, city time, and player interaction.
+- **`3d-lab` owns generic camera and browser-renderer mechanics.** `city-game` owns game-world projection, scene composition, simulation, progression, planning, city time, aggregate population/demand, and player interaction.
 - Future generic ECS, physics, assets, networking, and spatial algorithms should come from the corresponding shared repositories rather than growing local substitutes here.
 
 The foundation pins accepted revisions of both upstream foundations:
@@ -21,15 +21,17 @@ The foundation pins accepted revisions of both upstream foundations:
 .osm.pbf bytes
   -> moenarch-geo-io-osm parser model
   -> city-game semantic selection / normalization
-  -> canonical CityScenario + source provenance
-  -> immutable scenario + mutable CityWorld/planning overlay
-  -> CitySave + fixed-step time configuration
+  -> canonical CityScenario + source provenance + physical game measurements
+  -> immutable scenario + mutable CityWorld/planning/population state
+  -> CitySave + fixed-step and population rules
   -> game-world projection
   -> three-d-camera matrices + renderer frame
   -> @moritzbrantner/three-d-renderer browser surface
 ```
 
-OSM is therefore an import format, not the game's persistence model. The canonical scenario currently selects explicit roads, buildings, water, land-use constraints, and transit anchors while retaining source IDs only for provenance/reimport. Player-built roads, zoning, and redevelopment decisions are stored separately from the immutable imported scenario. Repeating the same planning command is idempotent, conflicting stable IDs fail closed, and restarting a scenario resets mutable state without rewriting the import.
+OSM is therefore an import format, not the game's persistence model. The canonical scenario selects explicit roads, buildings, water, land-use constraints, and transit anchors while retaining source IDs only for provenance/reimport. Physical measurements needed by later systems are also materialized at that boundary: imported buildings carry integer `grossFloorAreaM2`, derived once from source footprint plus level/height information. Runtime population logic does not need to interpret OSM tags or recompute geographic floor area.
+
+Player-built roads, zoning, and redevelopment decisions are stored separately from the immutable imported scenario. Repeating the same planning command is idempotent, conflicting stable IDs fail closed, and restarting a scenario resets mutable state without rewriting the import.
 
 ## Deterministic city time
 
@@ -37,7 +39,15 @@ Authoritative city simulation advances only through integer fixed steps. A save 
 
 Browser frame rate, elapsed wall-clock milliseconds, pause state, and playback speed are presentation/scheduling concerns only. They may determine how many fixed steps are requested, but they never change the meaning of one step. Tick overflow and invalid time configurations fail before the world is mutated.
 
-`CitySave` stores the game-native scenario together with its fixed-step configuration and mutable world state. Progression rules are data driven and evaluated deterministically until stable; later systems such as households, economy, or waste management can therefore run against the same replayable clock without hard-coding timing into UI code.
+## Aggregate population and RCI demand
+
+The playable-city foundation models households and jobs as aggregate stocks rather than creating one entity per citizen. Residential capacity is derived from residential building floor area; commercial and industrial job capacity are derived independently from their developed floor area. Explicit `PopulationRules` define the floor-area-per-unit assumptions plus initial and target occupancy.
+
+A new save seeds aggregate occupied households/jobs deterministically from the immutable imported building stock. If a player suppresses a building for redevelopment, developed capacity falls but existing occupants are not silently erased; the difference appears as bounded signed residential/commercial/industrial demand pressure. This makes redevelopment and future construction interact with the simulation without requiring individual citizen agents yet.
+
+Zoning is intentionally not capacity. A residential/commercial/industrial zone marks where later property development may occur, but no household or job capacity exists there until the development system creates an actual game building. That keeps zoning, construction, occupancy, and demand as separate concepts for the next economy/land slices.
+
+`CitySave` stores the game-native scenario together with fixed-step configuration, population rules, and mutable world state. Save/resume preserves these aggregates exactly, while scenario restart reseeds the original scenario-derived population baseline.
 
 ## Development
 

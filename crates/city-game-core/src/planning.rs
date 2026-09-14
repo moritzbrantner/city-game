@@ -4,7 +4,7 @@ use std::fmt;
 use geo_core::Geometry;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
-use crate::{CitySave, CityScenario, CityWorld, RoadClass};
+use crate::{CitySave, CityScenario, CityWorld, PopulationError, RoadClass};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -365,8 +365,13 @@ impl CitySave {
         self.world.planning.effective_roads(&self.scenario)
     }
 
-    pub fn restart(&mut self) {
-        self.world = CityWorld::default();
+    pub fn restart(&mut self) -> Result<(), PopulationError> {
+        let population = self.scenario_population_baseline()?;
+        self.world = CityWorld {
+            population,
+            ..CityWorld::default()
+        };
+        Ok(())
     }
 }
 
@@ -435,6 +440,7 @@ mod tests {
                 name: None,
                 levels: Some(3),
                 height_m: Some(9.0),
+                gross_floor_area_m2: 900,
             }],
             water: Vec::new(),
             land_use_areas: Vec::new(),
@@ -461,7 +467,7 @@ mod tests {
 
     #[test]
     fn repeated_commands_are_idempotent_but_conflicting_reuse_fails_closed() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         let road = PlannedRoad {
             id: "player/road/1".to_owned(),
             geometry: line(8.01),
@@ -493,7 +499,7 @@ mod tests {
 
     #[test]
     fn planning_never_mutates_imported_scenario() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         let original = save.scenario.clone();
 
         save.apply_planning(PlanningCommand::SuppressScenarioEntity {
@@ -515,7 +521,7 @@ mod tests {
 
     #[test]
     fn effective_roads_merge_scenario_and_player_state_deterministically() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.apply_planning(PlanningCommand::AddRoad {
             road: PlannedRoad {
                 id: "player/road/1".to_owned(),
@@ -544,7 +550,7 @@ mod tests {
 
     #[test]
     fn save_deserialization_rejects_invalid_planning_state() {
-        let mut mismatched_key = CitySave::new(scenario());
+        let mut mismatched_key = CitySave::new(scenario()).unwrap();
         mismatched_key.world.planning.player_roads.insert(
             "slot".to_owned(),
             PlannedRoad {
@@ -558,7 +564,7 @@ mod tests {
         let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
         assert!(error.to_string().contains("does not match nested id"));
 
-        let mut scenario_collision = CitySave::new(scenario());
+        let mut scenario_collision = CitySave::new(scenario()).unwrap();
         scenario_collision.world.planning.player_roads.insert(
             "imported/way/10".to_owned(),
             PlannedRoad {
@@ -576,7 +582,7 @@ mod tests {
                 .contains("reserved by the imported scenario")
         );
 
-        let mut invalid_geometry = CitySave::new(scenario());
+        let mut invalid_geometry = CitySave::new(scenario()).unwrap();
         invalid_geometry.world.planning.player_roads.insert(
             "player/road/1".to_owned(),
             PlannedRoad {
@@ -599,7 +605,7 @@ mod tests {
 
     #[test]
     fn save_roundtrip_and_restart_preserve_canonical_scenario_boundary() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.advance_tick().unwrap();
         save.apply_planning(PlanningCommand::ZoneArea {
             zone: PlannedZone {
@@ -618,9 +624,14 @@ mod tests {
 
         let scenario = save.scenario.clone();
         let time = save.time;
-        save.restart();
+        let population_rules = save.population_rules;
+        let population = save.scenario_population_baseline().unwrap();
+        save.restart().unwrap();
         assert_eq!(save.scenario, scenario);
         assert_eq!(save.time, time);
-        assert_eq!(save.world, CityWorld::default());
+        assert_eq!(save.population_rules, population_rules);
+        assert_eq!(save.world.population, population);
+        assert_eq!(save.world.planning, CityPlanningOverlay::default());
+        assert_eq!(save.world.tick, 0);
     }
 }

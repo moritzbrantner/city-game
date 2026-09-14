@@ -1,12 +1,15 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use geo_core::Geometry;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
-use crate::{CityPlanningOverlay, CityTimeConfig, ProgressionState};
+use crate::{
+    CityPlanningOverlay, CityTimeConfig, CityTimeError, PopulationError, PopulationRules,
+    PopulationState, ProgressionState,
+};
 
-pub const SCENARIO_SCHEMA_VERSION: u32 = 2;
-pub const SAVE_SCHEMA_VERSION: u32 = 3;
+pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
+pub const SAVE_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +119,7 @@ pub struct ScenarioBuilding {
     pub levels: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height_m: Option<f32>,
+    pub gross_floor_area_m2: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -176,6 +180,7 @@ pub struct CityWorld {
     pub metrics: BTreeMap<String, i64>,
     pub progression: ProgressionState,
     pub planning: CityPlanningOverlay,
+    pub population: PopulationState,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -183,9 +188,38 @@ pub struct CityWorld {
 pub struct CitySave {
     pub schema_version: u32,
     pub scenario: CityScenario,
-    #[serde(default)]
     pub time: CityTimeConfig,
+    pub population_rules: PopulationRules,
     pub world: CityWorld,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CitySaveError {
+    Time(CityTimeError),
+    Population(PopulationError),
+}
+
+impl fmt::Display for CitySaveError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Time(error) => error.fmt(formatter),
+            Self::Population(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for CitySaveError {}
+
+impl From<CityTimeError> for CitySaveError {
+    fn from(error: CityTimeError) -> Self {
+        Self::Time(error)
+    }
+}
+
+impl From<PopulationError> for CitySaveError {
+    fn from(error: PopulationError) -> Self {
+        Self::Population(error)
+    }
 }
 
 #[derive(Deserialize)]
@@ -195,6 +229,8 @@ struct CitySaveWire {
     scenario: CityScenario,
     #[serde(default)]
     time: CityTimeConfig,
+    #[serde(default)]
+    population_rules: PopulationRules,
     world: CityWorld,
 }
 
@@ -213,19 +249,26 @@ impl<'de> Deserialize<'de> for CitySave {
             schema_version: wire.schema_version,
             scenario: wire.scenario,
             time: wire.time,
+            population_rules: wire.population_rules,
             world: wire.world,
         })
     }
 }
 
 impl CitySave {
-    pub fn new(scenario: CityScenario) -> Self {
-        Self {
+    pub fn new(scenario: CityScenario) -> Result<Self, PopulationError> {
+        let population_rules = PopulationRules::default();
+        let population = PopulationState::baseline_from_scenario(&scenario, population_rules)?;
+        Ok(Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
             time: CityTimeConfig::default(),
-            world: CityWorld::default(),
-        }
+            population_rules,
+            world: CityWorld {
+                population,
+                ..CityWorld::default()
+            },
+        })
     }
 }
 
@@ -254,8 +297,8 @@ mod tests {
     }
 
     #[test]
-    fn save_roundtrip_preserves_game_scenario_provenance_and_clock() {
-        let mut save = CitySave::new(scenario());
+    fn save_roundtrip_preserves_game_scenario_provenance_clock_and_population_rules() {
+        let mut save = CitySave::new(scenario()).unwrap();
         save.advance_tick().unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
@@ -265,6 +308,7 @@ mod tests {
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
         assert_eq!(decoded.time, CityTimeConfig::default());
+        assert_eq!(decoded.population_rules, PopulationRules::default());
         assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
     }
