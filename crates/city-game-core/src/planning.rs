@@ -550,7 +550,7 @@ mod tests {
 
     #[test]
     fn save_deserialization_rejects_invalid_planning_state() {
-        let mut mismatched_key = CitySave::new(scenario());
+        let mut mismatched_key = CitySave::new(scenario()).unwrap();
         mismatched_key.world.planning.player_roads.insert(
             "slot".to_owned(),
             PlannedRoad {
@@ -564,7 +564,7 @@ mod tests {
         let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
         assert!(error.to_string().contains("does not match nested id"));
 
-        let mut scenario_collision = CitySave::new(scenario());
+        let mut scenario_collision = CitySave::new(scenario()).unwrap();
         scenario_collision.world.planning.player_roads.insert(
             "imported/way/10".to_owned(),
             PlannedRoad {
@@ -582,7 +582,7 @@ mod tests {
                 .contains("reserved by the imported scenario")
         );
 
-        let mut invalid_geometry = CitySave::new(scenario());
+        let mut invalid_geometry = CitySave::new(scenario()).unwrap();
         invalid_geometry.world.planning.player_roads.insert(
             "player/road/1".to_owned(),
             PlannedRoad {
