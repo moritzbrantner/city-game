@@ -5,6 +5,7 @@
 //! Application writes enter through [`CitySave::execute`]; reads use [`CitySave::query`] or
 //! [`CitySave::queries`].
 
+#[cfg(any(test, target_arch = "wasm32"))]
 mod browser_transport;
 mod commands;
 mod model;
