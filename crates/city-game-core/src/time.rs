@@ -26,7 +26,7 @@ impl CityTimeConfig {
     }
 
     pub fn validate(self) -> Result<(), CityTimeError> {
-        if self.minutes_per_tick == 0 || MINUTES_PER_DAY % self.minutes_per_tick != 0 {
+        if self.minutes_per_tick == 0 || !MINUTES_PER_DAY.is_multiple_of(self.minutes_per_tick) {
             return Err(CityTimeError::InvalidMinutesPerTick(self.minutes_per_tick));
         }
         Ok(())
