@@ -79,10 +79,16 @@ impl fmt::Display for PlanningError {
                 formatter.write_str("zone geometry must be a polygon or multipolygon")
             }
             Self::ConflictingPlayerEntityId(id) => {
-                write!(formatter, "player entity id {id} is already used by different state")
+                write!(
+                    formatter,
+                    "player entity id {id} is already used by different state"
+                )
             }
             Self::ScenarioEntityIdReserved(id) => {
-                write!(formatter, "player entity id {id} is reserved by the imported scenario")
+                write!(
+                    formatter,
+                    "player entity id {id} is reserved by the imported scenario"
+                )
             }
             Self::UnknownScenarioEntity(id) => {
                 write!(formatter, "scenario entity {id} does not exist")
@@ -289,9 +295,7 @@ fn validate_id(id: &str) -> Result<(), PlanningError> {
 fn valid_road_geometry(geometry: &Geometry) -> bool {
     match geometry {
         Geometry::LineString { coordinates } => coordinates.len() >= 2,
-        Geometry::MultiLineString { coordinates } => {
-            coordinates.iter().any(|line| line.len() >= 2)
-        }
+        Geometry::MultiLineString { coordinates } => coordinates.iter().any(|line| line.len() >= 2),
         Geometry::GeometryCollection { geometries } => geometries.iter().any(valid_road_geometry),
         Geometry::Point { .. }
         | Geometry::MultiPoint { .. }
@@ -301,7 +305,10 @@ fn valid_road_geometry(geometry: &Geometry) -> bool {
 }
 
 fn valid_zone_geometry(geometry: &Geometry) -> bool {
-    matches!(geometry, Geometry::Polygon { .. } | Geometry::MultiPolygon { .. })
+    matches!(
+        geometry,
+        Geometry::Polygon { .. } | Geometry::MultiPolygon { .. }
+    )
 }
 
 #[cfg(test)]
