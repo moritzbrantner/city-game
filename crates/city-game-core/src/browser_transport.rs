@@ -32,8 +32,7 @@ pub(crate) fn execute_json(save_json: &str, command_json: &str) -> String {
 
 pub(crate) fn query_json(save_json: &str, query_json: &str) -> String {
     encode_result((|| {
-        let save: CitySave =
-            serde_json::from_str(save_json).map_err(|error| error.to_string())?;
+        let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
         let query: CityQuery =
             serde_json::from_str(query_json).map_err(|error| error.to_string())?;
         let result = save.query(query).map_err(|error| error.to_string())?;
@@ -43,8 +42,7 @@ pub(crate) fn query_json(save_json: &str, query_json: &str) -> String {
 
 pub(crate) fn render_frame_json(save_json: &str, aspect: f32) -> String {
     encode_result((|| {
-        let save: CitySave =
-            serde_json::from_str(save_json).map_err(|error| error.to_string())?;
+        let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
         let frame = build_save_render_frame(&save, aspect).map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "frame": frame }))
     })())
@@ -129,6 +127,11 @@ mod tests {
         .unwrap();
 
         assert_eq!(response["ok"], false);
-        assert!(response["error"].as_str().unwrap().contains("missing field"));
+        assert!(
+            response["error"]
+                .as_str()
+                .unwrap()
+                .contains("missing field")
+        );
     }
 }
