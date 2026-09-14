@@ -97,7 +97,10 @@ mod tests {
 
         assert_eq!(response["ok"], true);
         assert_eq!(response["save"]["schemaVersion"], SAVE_SCHEMA_VERSION);
-        assert_eq!(response["save"]["scenario"]["schemaVersion"], SCENARIO_SCHEMA_VERSION);
+        assert_eq!(
+            response["save"]["scenario"]["schemaVersion"],
+            SCENARIO_SCHEMA_VERSION
+        );
     }
 
     #[test]
