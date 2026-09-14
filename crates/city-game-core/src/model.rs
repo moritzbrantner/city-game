@@ -4,7 +4,8 @@ use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CityPlanningOverlay, CityTimeConfig, PopulationRules, PopulationState, ProgressionState,
+    CityPlanningOverlay, CityTimeConfig, PopulationError, PopulationRules, PopulationState,
+    ProgressionState,
 };
 
 pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
@@ -193,11 +194,10 @@ pub struct CitySave {
 }
 
 impl CitySave {
-    pub fn new(scenario: CityScenario) -> Self {
+    pub fn new(scenario: CityScenario) -> Result<Self, PopulationError> {
         let population_rules = PopulationRules::default();
-        let population = PopulationState::baseline_from_scenario(&scenario, population_rules)
-            .expect("canonical scenario capacity fits aggregate population state");
-        Self {
+        let population = PopulationState::baseline_from_scenario(&scenario, population_rules)?;
+        Ok(Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
             time: CityTimeConfig::default(),
@@ -206,7 +206,7 @@ impl CitySave {
                 population,
                 ..CityWorld::default()
             },
-        }
+        })
     }
 }
 
@@ -236,7 +236,7 @@ mod tests {
 
     #[test]
     fn save_roundtrip_preserves_game_scenario_provenance_clock_and_population_rules() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.advance_tick().unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
