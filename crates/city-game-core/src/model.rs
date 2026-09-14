@@ -3,10 +3,10 @@ use std::collections::BTreeMap;
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
-use crate::{CityPlanningOverlay, ProgressionState};
+use crate::{CityPlanningOverlay, CityTimeConfig, ProgressionState};
 
 pub const SCENARIO_SCHEMA_VERSION: u32 = 2;
-pub const SAVE_SCHEMA_VERSION: u32 = 2;
+pub const SAVE_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -178,17 +178,13 @@ pub struct CityWorld {
     pub planning: CityPlanningOverlay,
 }
 
-impl CityWorld {
-    pub fn advance_tick(&mut self) {
-        self.tick = self.tick.saturating_add(1);
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitySave {
     pub schema_version: u32,
     pub scenario: CityScenario,
+    #[serde(default)]
+    pub time: CityTimeConfig,
     pub world: CityWorld,
 }
 
@@ -197,6 +193,7 @@ impl CitySave {
         Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
+            time: CityTimeConfig::default(),
             world: CityWorld::default(),
         }
     }
@@ -227,9 +224,9 @@ mod tests {
     }
 
     #[test]
-    fn save_roundtrip_preserves_game_scenario_provenance() {
+    fn save_roundtrip_preserves_game_scenario_provenance_and_clock() {
         let mut save = CitySave::new(scenario());
-        save.world.advance_tick();
+        save.advance_tick().unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
@@ -237,6 +234,8 @@ mod tests {
         assert_eq!(decoded, save);
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
+        assert_eq!(decoded.time, CityTimeConfig::default());
+        assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
     }
 }

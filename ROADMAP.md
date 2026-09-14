@@ -15,8 +15,8 @@
 - Treat canonical imported roads/building footprints/water/land use as the initial scenario, not a background image or runtime OSM model.
 - Add player-owned road and zoning changes as a deterministic overlay on immutable scenario state; redevelopment suppresses/replaces scenario entities without rewriting the import.
 - Save/resume and scenario restart operate on the game-native scenario/world format, never OSM.
-- Establish deterministic fixed-step city time.
-- Add population households/jobs at the level needed to drive zoning demand without prematurely simulating every citizen.
+- Use deterministic fixed-step city time: a save owns the validated step scale, the world stores an integer tick, and calendar position is derived without wall-clock simulation authority.
+- **Next:** add aggregate households/jobs and zoning demand without prematurely simulating every citizen.
 - Add interactive planning controls after the authoritative command/overlay boundary is proven.
 
 ## 2. Economy and land

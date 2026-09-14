@@ -1,4 +1,4 @@
-//! Authoritative scenario, simulation-state, progression, planning, and render-adapter core for city-game.
+//! Authoritative scenario, simulation-state, progression, planning, time, and render-adapter core for city-game.
 //!
 //! OSM parsing stays in `moenarch-geo-io-osm`; generic camera/renderer mechanics stay in 3d-lab.
 //! OSM is an import format only: simulation and persistence operate on the canonical game schema.
@@ -8,6 +8,7 @@ mod osm;
 mod planning;
 mod progression;
 mod render;
+mod time;
 
 pub use model::{
     BuildingUse, CitySave, CityScenario, CityWorld, ExternalRevision, LandUseKind, RoadClass,
@@ -23,4 +24,7 @@ pub use progression::{ProgressionRule, ProgressionState, Requirement};
 pub use render::{
     RendererCamera, RendererFrame, RendererGeometry, RendererSceneNode, RendererTransform,
     THREE_D_LAB_REVISION, build_render_frame, build_save_render_frame,
+};
+pub use time::{
+    CityTimeConfig, CityTimeError, CityTimePosition, DEFAULT_MINUTES_PER_TICK, MINUTES_PER_DAY,
 };
