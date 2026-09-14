@@ -105,7 +105,10 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
             source_id,
             class: road_class(&feature.tags),
             name,
-            lanes: feature.tags.get("lanes").and_then(|value| parse_lanes(value)),
+            lanes: feature
+                .tags
+                .get("lanes")
+                .and_then(|value| parse_lanes(value)),
             max_speed_kph: feature
                 .tags
                 .get("maxspeed")
@@ -121,7 +124,10 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
                 .tags
                 .get("building:levels")
                 .and_then(|value| parse_positive_u16(value)),
-            height_m: feature.tags.get("height").and_then(|value| parse_height_m(value)),
+            height_m: feature
+                .tags
+                .get("height")
+                .and_then(|value| parse_height_m(value)),
             footprint: feature.geometry,
         }),
         ImportedKind::Water => NormalizedFeature::Water(ScenarioWater {
@@ -221,14 +227,14 @@ fn road_class(tags: &OsmTags) -> RoadClass {
 fn building_use(tags: &OsmTags) -> BuildingUse {
     match tags.get("building").map(String::as_str) {
         Some(
-            "apartments" | "house" | "residential" | "detached" | "semidetached_house"
-            | "terrace" | "dormitory",
+            "apartments" | "house" | "residential" | "detached" | "semidetached_house" | "terrace"
+            | "dormitory",
         ) => BuildingUse::Residential,
         Some("commercial" | "retail" | "office" | "hotel") => BuildingUse::Commercial,
         Some("industrial" | "warehouse" | "manufacture") => BuildingUse::Industrial,
         Some(
-            "school" | "hospital" | "civic" | "government" | "public" | "church"
-            | "cathedral" | "chapel",
+            "school" | "hospital" | "civic" | "government" | "public" | "church" | "cathedral"
+            | "chapel",
         ) => BuildingUse::Civic,
         Some("farm" | "farm_auxiliary" | "barn" | "stable" | "greenhouse") => {
             BuildingUse::Agricultural
@@ -305,11 +311,7 @@ fn parse_max_speed_kph(value: &str) -> Option<u16> {
 }
 
 fn parse_positive_u16(value: &str) -> Option<u16> {
-    value
-        .trim()
-        .parse::<u16>()
-        .ok()
-        .filter(|value| *value > 0)
+    value.trim().parse::<u16>().ok().filter(|value| *value > 0)
 }
 
 fn parse_height_m(value: &str) -> Option<f32> {
