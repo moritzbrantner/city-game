@@ -16,8 +16,8 @@ pub use model::{
 };
 pub use osm::{GEO_ANALYSIS_REVISION, OSM_PARSER_REPOSITORY, import_osm_pbf_bytes};
 pub use planning::{
-    CityPlanningOverlay, EffectiveRoad, EffectiveRoadOrigin, PlannedRoad, PlannedZone, PlanningCommand,
-    PlanningError, PlanningOutcome, ZoneKind,
+    CityPlanningOverlay, EffectiveRoad, EffectiveRoadOrigin, PlannedRoad, PlannedZone,
+    PlanningCommand, PlanningError, PlanningOutcome, ZoneKind,
 };
 pub use progression::{ProgressionRule, ProgressionState, Requirement};
 pub use render::{
