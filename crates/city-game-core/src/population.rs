@@ -326,6 +326,7 @@ mod tests {
             schema_version: crate::SAVE_SCHEMA_VERSION,
             scenario: scenario(),
             time: crate::CityTimeConfig::default(),
+            ruleset: crate::CityRuleset::default(),
             population_rules: rules,
             world: CityWorld {
                 population,
