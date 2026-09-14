@@ -1,23 +1,19 @@
 use std::fmt;
 
 use crate::{
-    CitySave, CitySaveError, CityTimePosition, CityWorld, PlanningCommand, PlanningError,
-    PlanningOutcome, PopulationError, RuleSystem, RulesetError,
+    CitySave, CityWorld, PlanningCommand, PlanningError, PlanningOutcome, PopulationError, RuleSystem,
+    RulesetError,
 };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CityCommand {
     Planning(PlanningCommand),
-    AdvanceFixedSteps { steps: u64 },
-    EvaluateProgression,
     Restart,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum CityCommandOutcome {
     Planning(PlanningOutcome),
-    Advanced(CityTimePosition),
-    ProgressionEvaluated { newly_unlocked: Vec<String> },
     Restarted,
 }
 
@@ -26,7 +22,6 @@ pub enum CityCommandError {
     Ruleset(RulesetError),
     SystemDisabled(RuleSystem),
     Planning(PlanningError),
-    Save(CitySaveError),
     Population(PopulationError),
 }
 
@@ -36,7 +31,6 @@ impl fmt::Display for CityCommandError {
             Self::Ruleset(error) => error.fmt(formatter),
             Self::SystemDisabled(system) => write!(formatter, "{system:?} rules are disabled"),
             Self::Planning(error) => error.fmt(formatter),
-            Self::Save(error) => error.fmt(formatter),
             Self::Population(error) => error.fmt(formatter),
         }
     }
@@ -56,12 +50,6 @@ impl From<PlanningError> for CityCommandError {
     }
 }
 
-impl From<CitySaveError> for CityCommandError {
-    fn from(error: CitySaveError) -> Self {
-        Self::Save(error)
-    }
-}
-
 impl From<PopulationError> for CityCommandError {
     fn from(error: PopulationError) -> Self {
         Self::Population(error)
@@ -69,6 +57,10 @@ impl From<PopulationError> for CityCommandError {
 }
 
 impl CitySave {
+    /// Executes application/player intent.
+    ///
+    /// Fixed-step simulation and internal system evaluation deliberately do not flow through this
+    /// gateway; they use direct deterministic simulation operations instead.
     pub fn execute(
         &mut self,
         command: CityCommand,
@@ -81,17 +73,6 @@ impl CitySave {
                     return Err(CityCommandError::SystemDisabled(RuleSystem::Planning));
                 }
                 Ok(CityCommandOutcome::Planning(self.apply_planning(command)?))
-            }
-            CityCommand::AdvanceFixedSteps { steps } => Ok(CityCommandOutcome::Advanced(
-                self.advance_fixed_steps(steps)?,
-            )),
-            CityCommand::EvaluateProgression => {
-                if !self.ruleset.is_enabled(RuleSystem::Progression) {
-                    return Err(CityCommandError::SystemDisabled(RuleSystem::Progression));
-                }
-                let rules = self.ruleset.progression_rules.clone();
-                let newly_unlocked = self.world.progression.evaluate(&rules, &self.world.metrics);
-                Ok(CityCommandOutcome::ProgressionEvaluated { newly_unlocked })
             }
             CityCommand::Restart => {
                 if self.ruleset.is_enabled(RuleSystem::Population) {
@@ -108,8 +89,8 @@ impl CitySave {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CityScenario, ExternalRevision, PopulationRules, ProgressionRule, Requirement, RuleStatus,
-        SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
+        CityScenario, ExternalRevision, PopulationRules, RuleStatus, SCENARIO_SCHEMA_VERSION,
+        ScenarioProvenance,
     };
 
     use super::*;
@@ -119,8 +100,8 @@ mod tests {
             schema_version: SCENARIO_SCHEMA_VERSION,
             provenance: ScenarioProvenance {
                 source_format: "fixture".to_owned(),
-                source_name: "cqrs".to_owned(),
-                source_sha256: "cqrs".to_owned(),
+                source_name: "commands".to_owned(),
+                source_sha256: "commands".to_owned(),
                 parser: ExternalRevision {
                     repository: "fixture".to_owned(),
                     revision: "fixture".to_owned(),
@@ -146,42 +127,6 @@ mod tests {
                 id: "player/road/1".to_owned(),
             })),
             Err(CityCommandError::SystemDisabled(RuleSystem::Planning))
-        );
-        assert_eq!(save, before);
-    }
-
-    #[test]
-    fn progression_rules_are_configuration_and_evaluate_through_command_gateway() {
-        let mut save = CitySave::new(scenario()).unwrap();
-        save.world.metrics.insert("population".to_owned(), 1_000);
-        save.ruleset.progression_rules = vec![ProgressionRule {
-            id: "services".to_owned(),
-            unlocks: "basic-services".to_owned(),
-            all: vec![Requirement::MetricAtLeast {
-                metric: "population".to_owned(),
-                value: 1_000,
-            }],
-        }];
-
-        assert_eq!(
-            save.execute(CityCommand::EvaluateProgression).unwrap(),
-            CityCommandOutcome::ProgressionEvaluated {
-                newly_unlocked: vec!["basic-services".to_owned()]
-            }
-        );
-        assert!(save.world.progression.unlocked.contains("basic-services"));
-    }
-
-    #[test]
-    fn disabled_progression_rejects_evaluation_without_mutation() {
-        let mut save = CitySave::new(scenario()).unwrap();
-        save.ruleset
-            .set_status(RuleSystem::Progression, RuleStatus::Disabled);
-        let before = save.clone();
-
-        assert_eq!(
-            save.execute(CityCommand::EvaluateProgression),
-            Err(CityCommandError::SystemDisabled(RuleSystem::Progression))
         );
         assert_eq!(save, before);
     }
