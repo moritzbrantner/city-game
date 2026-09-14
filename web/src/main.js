@@ -13,6 +13,11 @@ if (!response.ok) {
   throw new Error(`failed to load generated renderer frame: ${response.status}`);
 }
 const frame = validateRenderFrame(await response.json());
+if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
+  throw new Error("generated renderer frame must declare a finite positive camera aspect");
+}
+canvas.style.aspectRatio = String(frame.camera.aspect);
+
 const renderer = createThreeSceneRenderer(canvas, {
   antialias: true,
   background: 0xe5e4de,
