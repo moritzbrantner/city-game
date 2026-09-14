@@ -119,6 +119,7 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
             geometry: feature.geometry,
         }),
         ImportedKind::Building => {
+            let use_kind = building_use(&feature.tags);
             let levels = feature
                 .tags
                 .get("building:levels")
@@ -127,16 +128,17 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
                 .tags
                 .get("height")
                 .and_then(|value| parse_height_m(value));
-            let gross_floor_area_m2 = gross_floor_area_m2(&feature.geometry, levels, height_m);
+            let footprint = canonical_building_footprint(feature.geometry);
+            let gross_floor_area_m2 = gross_floor_area_m2(&footprint, levels, height_m);
             NormalizedFeature::Building(ScenarioBuilding {
                 id,
                 source_id,
-                use_kind: building_use(&feature.tags),
+                use_kind,
                 name,
                 levels,
                 height_m,
                 gross_floor_area_m2,
-                footprint: feature.geometry,
+                footprint,
             })
         }
         ImportedKind::Water => NormalizedFeature::Water(ScenarioWater {
@@ -333,6 +335,19 @@ fn parse_height_m(value: &str) -> Option<f32> {
         .map(|height| height.clamp(0.5, 1_000.0))
 }
 
+fn canonical_building_footprint(geometry: Geometry) -> Geometry {
+    match geometry {
+        Geometry::LineString { coordinates }
+            if coordinates.len() >= 4 && coordinates.first() == coordinates.last() =>
+        {
+            Geometry::Polygon {
+                coordinates: vec![coordinates],
+            }
+        }
+        other => other,
+    }
+}
+
 fn gross_floor_area_m2(geometry: &Geometry, levels: Option<u16>, height_m: Option<f32>) -> u64 {
     let footprint_area = geometry_area_m2(geometry);
     let levels = levels.unwrap_or_else(|| {
@@ -521,6 +536,7 @@ mod tests {
         assert_eq!(first.buildings.len(), 1);
         assert_eq!(first.buildings[0].use_kind, BuildingUse::Residential);
         assert_eq!(first.buildings[0].levels, Some(4));
+        assert!(matches!(first.buildings[0].footprint, Geometry::Polygon { .. }));
         assert!(first.buildings[0].gross_floor_area_m2 > 0);
 
         let encoded = serde_json::to_string(&first).unwrap();
