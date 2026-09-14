@@ -136,9 +136,7 @@ impl CitySave {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
-    };
+    use crate::{ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
 
     use super::*;
 
