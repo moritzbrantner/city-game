@@ -244,16 +244,21 @@ fn building_use(tags: &OsmTags) -> BuildingUse {
 }
 
 fn water_kind(tags: &OsmTags) -> WaterKind {
-    match tags.get("waterway").map(String::as_str) {
+    if let Some(value) = tags.get("waterway").map(String::as_str) {
+        return match value {
+            "river" => WaterKind::River,
+            "stream" => WaterKind::Stream,
+            "canal" => WaterKind::Canal,
+            _ => WaterKind::Other,
+        };
+    }
+
+    match tags.get("water").map(String::as_str) {
         Some("river") => WaterKind::River,
         Some("stream") => WaterKind::Stream,
         Some("canal") => WaterKind::Canal,
-        Some(_) => WaterKind::Other,
-        None if tags.get("natural").is_some_and(|value| value == "water")
-            || tags.contains_key("water") =>
-        {
-            WaterKind::Body
-        }
+        Some(_) => WaterKind::Body,
+        None if tags.get("natural").is_some_and(|value| value == "water") => WaterKind::Body,
         None => WaterKind::Other,
     }
 }
@@ -473,5 +478,21 @@ mod tests {
         residential.insert("highway".to_owned(), "residential".to_owned());
         assert_eq!(classify(&residential), ImportedKind::Road);
         assert_eq!(road_class(&residential), RoadClass::Residential);
+    }
+
+    #[test]
+    fn water_tag_is_normalized_before_raw_osm_tags_are_discarded() {
+        for (value, expected) in [
+            ("river", WaterKind::River),
+            ("stream", WaterKind::Stream),
+            ("canal", WaterKind::Canal),
+            ("lake", WaterKind::Body),
+        ] {
+            let mut tags = OsmTags::default();
+            tags.insert("natural".to_owned(), "water".to_owned());
+            tags.insert("water".to_owned(), value.to_owned());
+            assert_eq!(classify(&tags), ImportedKind::Water);
+            assert_eq!(water_kind(&tags), expected);
+        }
     }
 }
