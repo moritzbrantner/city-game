@@ -40,13 +40,7 @@ pub extern "C" fn city_game_execute(
     command_ptr: u32,
     command_len: u32,
 ) -> u64 {
-    respond_with_two(
-        save_ptr,
-        save_len,
-        command_ptr,
-        command_len,
-        execute_json,
-    )
+    respond_with_two(save_ptr, save_len, command_ptr, command_len, execute_json)
 }
 
 #[unsafe(no_mangle)]
@@ -60,11 +54,7 @@ pub extern "C" fn city_game_query(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn city_game_render_frame(
-    save_ptr: u32,
-    save_len: u32,
-    aspect: f32,
-) -> u64 {
+pub extern "C" fn city_game_render_frame(save_ptr: u32, save_len: u32, aspect: f32) -> u64 {
     let response = match read_input(save_ptr, save_len) {
         Ok(save) => render_frame_json(&save, aspect),
         Err(error) => error_response(&error),
