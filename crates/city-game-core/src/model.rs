@@ -4,12 +4,12 @@ use geo_core::Geometry;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{
-    CityPlanningOverlay, CityTimeConfig, CityTimeError, PopulationError, PopulationRules,
-    PopulationState, ProgressionState,
+    CityPlanningOverlay, CityRuleset, CityTimeConfig, CityTimeError, PopulationError,
+    PopulationRules, PopulationState, ProgressionState,
 };
 
 pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
-pub const SAVE_SCHEMA_VERSION: u32 = 4;
+pub const SAVE_SCHEMA_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -189,6 +189,7 @@ pub struct CitySave {
     pub schema_version: u32,
     pub scenario: CityScenario,
     pub time: CityTimeConfig,
+    pub ruleset: CityRuleset,
     pub population_rules: PopulationRules,
     pub world: CityWorld,
 }
@@ -230,6 +231,8 @@ struct CitySaveWire {
     #[serde(default)]
     time: CityTimeConfig,
     #[serde(default)]
+    ruleset: CityRuleset,
+    #[serde(default)]
     population_rules: PopulationRules,
     world: CityWorld,
 }
@@ -240,15 +243,23 @@ impl<'de> Deserialize<'de> for CitySave {
         D: Deserializer<'de>,
     {
         let wire = CitySaveWire::deserialize(deserializer)?;
+        if wire.schema_version > SAVE_SCHEMA_VERSION {
+            return Err(D::Error::custom(format!(
+                "unsupported city save schema version {}",
+                wire.schema_version
+            )));
+        }
+        wire.ruleset.validate().map_err(D::Error::custom)?;
         wire.world
             .planning
             .validate_against_scenario(&wire.scenario)
             .map_err(D::Error::custom)?;
 
         Ok(Self {
-            schema_version: wire.schema_version,
+            schema_version: SAVE_SCHEMA_VERSION,
             scenario: wire.scenario,
             time: wire.time,
+            ruleset: wire.ruleset,
             population_rules: wire.population_rules,
             world: wire.world,
         })
@@ -263,6 +274,7 @@ impl CitySave {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
             time: CityTimeConfig::default(),
+            ruleset: CityRuleset::default(),
             population_rules,
             world: CityWorld {
                 population,
@@ -297,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn save_roundtrip_preserves_game_scenario_provenance_clock_and_population_rules() {
+    fn save_roundtrip_preserves_game_scenario_provenance_clock_ruleset_and_population_rules() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.advance_tick().unwrap();
 
@@ -305,11 +317,26 @@ mod tests {
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
 
         assert_eq!(decoded, save);
+        assert_eq!(decoded.schema_version, SAVE_SCHEMA_VERSION);
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
         assert_eq!(decoded.time, CityTimeConfig::default());
+        assert_eq!(decoded.ruleset, CityRuleset::default());
         assert_eq!(decoded.population_rules, PopulationRules::default());
         assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
+    }
+
+    #[test]
+    fn version_four_save_defaults_to_enabled_rules_and_migrates_on_load() {
+        let save = CitySave::new(scenario()).unwrap();
+        let mut encoded = serde_json::to_value(save).unwrap();
+        encoded["schemaVersion"] = serde_json::json!(4);
+        encoded.as_object_mut().unwrap().remove("ruleset");
+
+        let decoded: CitySave = serde_json::from_value(encoded).unwrap();
+
+        assert_eq!(decoded.schema_version, SAVE_SCHEMA_VERSION);
+        assert_eq!(decoded.ruleset, CityRuleset::default());
     }
 }
