@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "provenance": {
     "sourceFormat": "osm-pbf",
     "sourceName": "synthetic-foundation.osm.pbf",
@@ -9,41 +9,43 @@
       "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
     }
   },
-  "features": [
+  "roads": [
     {
+      "id": "imported/way/10",
       "sourceId": "way/10",
-      "kind": "road",
-      "tags": {
-        "highway": "residential",
-        "name": "Foundation Street"
-      },
       "geometry": {
         "type": "LineString",
         "coordinates": [[8.4000, 49.0000], [8.4015, 49.0008], [8.4030, 49.0004]]
-      }
-    },
-    {
-      "sourceId": "way/20",
-      "kind": "building",
-      "tags": {
-        "building": "apartments",
-        "building:levels": "4"
       },
-      "geometry": {
+      "class": "residential",
+      "name": "Foundation Street",
+      "lanes": 2,
+      "maxSpeedKph": 50
+    }
+  ],
+  "buildings": [
+    {
+      "id": "imported/way/20",
+      "sourceId": "way/20",
+      "footprint": {
         "type": "Polygon",
         "coordinates": [[[8.4010, 49.0002], [8.4014, 49.0002], [8.4014, 49.0005], [8.4010, 49.0005], [8.4010, 49.0002]]]
-      }
-    },
-    {
-      "sourceId": "way/30",
-      "kind": "water",
-      "tags": {
-        "natural": "water"
       },
+      "useKind": "residential",
+      "levels": 4
+    }
+  ],
+  "water": [
+    {
+      "id": "imported/way/30",
+      "sourceId": "way/30",
       "geometry": {
         "type": "Polygon",
         "coordinates": [[[8.4020, 48.9995], [8.4030, 48.9995], [8.4030, 48.9998], [8.4020, 48.9998], [8.4020, 48.9995]]]
-      }
+      },
+      "kind": "body"
     }
-  ]
+  ],
+  "landUseAreas": [],
+  "transitAnchors": []
 }
