@@ -3,10 +3,10 @@ use std::collections::BTreeMap;
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
-use crate::ProgressionState;
+use crate::{CityPlanningOverlay, ProgressionState};
 
-pub const SCENARIO_SCHEMA_VERSION: u32 = 1;
-pub const SAVE_SCHEMA_VERSION: u32 = 1;
+pub const SCENARIO_SCHEMA_VERSION: u32 = 2;
+pub const SAVE_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,22 +26,125 @@ pub struct ScenarioProvenance {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ScenarioFeatureKind {
-    Road,
-    Building,
-    Water,
-    LandUse,
-    Transit,
+pub enum RoadClass {
+    Motorway,
+    Trunk,
+    Primary,
+    Secondary,
+    Tertiary,
+    Residential,
+    Service,
+    Track,
+    Pedestrian,
+    Cycleway,
+    Footway,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BuildingUse {
+    Residential,
+    Commercial,
+    Industrial,
+    Civic,
+    Agricultural,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum WaterKind {
+    Body,
+    River,
+    Stream,
+    Canal,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum LandUseKind {
+    Residential,
+    Commercial,
+    Industrial,
+    Retail,
+    Forest,
+    Farmland,
+    Recreation,
+    Cemetery,
+    Other,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TransitKind {
+    BusStop,
+    Platform,
+    Station,
+    TramStop,
+    StopPosition,
+    Rail,
     Other,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ScenarioFeature {
+pub struct ScenarioRoad {
+    pub id: String,
     pub source_id: String,
-    pub kind: ScenarioFeatureKind,
-    pub tags: BTreeMap<String, String>,
     pub geometry: Geometry,
+    pub class: RoadClass,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lanes: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_speed_kph: Option<u16>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioBuilding {
+    pub id: String,
+    pub source_id: String,
+    pub footprint: Geometry,
+    pub use_kind: BuildingUse,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub levels: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height_m: Option<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioWater {
+    pub id: String,
+    pub source_id: String,
+    pub geometry: Geometry,
+    pub kind: WaterKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioLandUse {
+    pub id: String,
+    pub source_id: String,
+    pub geometry: Geometry,
+    pub kind: LandUseKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScenarioTransitAnchor {
+    pub id: String,
+    pub source_id: String,
+    pub geometry: Geometry,
+    pub kind: TransitKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -49,15 +152,30 @@ pub struct ScenarioFeature {
 pub struct CityScenario {
     pub schema_version: u32,
     pub provenance: ScenarioProvenance,
-    pub features: Vec<ScenarioFeature>,
+    pub roads: Vec<ScenarioRoad>,
+    pub buildings: Vec<ScenarioBuilding>,
+    pub water: Vec<ScenarioWater>,
+    pub land_use_areas: Vec<ScenarioLandUse>,
+    pub transit_anchors: Vec<ScenarioTransitAnchor>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+impl CityScenario {
+    pub fn contains_entity(&self, id: &str) -> bool {
+        self.roads.iter().any(|entity| entity.id == id)
+            || self.buildings.iter().any(|entity| entity.id == id)
+            || self.water.iter().any(|entity| entity.id == id)
+            || self.land_use_areas.iter().any(|entity| entity.id == id)
+            || self.transit_anchors.iter().any(|entity| entity.id == id)
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CityWorld {
     pub tick: u64,
     pub metrics: BTreeMap<String, i64>,
     pub progression: ProgressionState,
+    pub planning: CityPlanningOverlay,
 }
 
 impl CityWorld {
@@ -88,9 +206,8 @@ impl CitySave {
 mod tests {
     use super::*;
 
-    #[test]
-    fn save_roundtrip_preserves_source_provenance() {
-        let scenario = CityScenario {
+    fn scenario() -> CityScenario {
+        CityScenario {
             schema_version: SCENARIO_SCHEMA_VERSION,
             provenance: ScenarioProvenance {
                 source_format: "osm-pbf".to_owned(),
@@ -101,9 +218,17 @@ mod tests {
                     revision: "deadbeef".to_owned(),
                 },
             },
-            features: Vec::new(),
-        };
-        let mut save = CitySave::new(scenario);
+            roads: Vec::new(),
+            buildings: Vec::new(),
+            water: Vec::new(),
+            land_use_areas: Vec::new(),
+            transit_anchors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn save_roundtrip_preserves_game_scenario_provenance() {
+        let mut save = CitySave::new(scenario());
         save.world.advance_tick();
 
         let encoded = serde_json::to_string(&save).unwrap();
@@ -112,5 +237,6 @@ mod tests {
         assert_eq!(decoded, save);
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
+        assert!(!encoded.contains("\"tags\""));
     }
 }
