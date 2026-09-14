@@ -191,7 +191,10 @@ mod tests {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Population, RuleStatus::Disabled);
-        save.ruleset.population.config.residential_floor_area_m2_per_household = 72;
+        save.ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 72;
         save.world.tick = 7;
 
         assert_eq!(
@@ -200,7 +203,10 @@ mod tests {
         );
         assert_eq!(save.world, CityWorld::default());
         assert_eq!(
-            save.ruleset.population.config.residential_floor_area_m2_per_household,
+            save.ruleset
+                .population
+                .config
+                .residential_floor_area_m2_per_household,
             72
         );
     }
