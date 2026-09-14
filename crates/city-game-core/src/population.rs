@@ -170,10 +170,9 @@ impl CitySave {
     }
 
     pub fn rci_demand(&self) -> Result<RciDemand, PopulationError> {
-        self.world.population.demand(
-            self.developed_population_capacity()?,
-            self.population_rules,
-        )
+        self.world
+            .population
+            .demand(self.developed_population_capacity()?, self.population_rules)
     }
 
     pub(crate) fn scenario_population_baseline(&self) -> Result<PopulationState, PopulationError> {
@@ -222,7 +221,11 @@ fn apply_basis_points(value: u64, basis_points: u16) -> u64 {
 
 fn demand_pressure(occupied: u64, capacity: u64, target_basis_points: u16) -> i32 {
     if capacity == 0 {
-        return if occupied == 0 { 0 } else { MAX_DEMAND_PRESSURE };
+        return if occupied == 0 {
+            0
+        } else {
+            MAX_DEMAND_PRESSURE
+        };
     }
 
     let target = apply_basis_points(capacity, target_basis_points).max(1);
@@ -305,7 +308,10 @@ mod tests {
         assert_eq!(baseline.households, 90);
         assert_eq!(baseline.commercial_jobs, 90);
         assert_eq!(baseline.industrial_jobs, 90);
-        assert_eq!(baseline.demand(capacity, rules).unwrap(), RciDemand::default());
+        assert_eq!(
+            baseline.demand(capacity, rules).unwrap(),
+            RciDemand::default()
+        );
     }
 
     #[test]
