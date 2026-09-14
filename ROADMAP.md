@@ -10,6 +10,7 @@
 - Establish deterministic, data-driven progression rules.
 - Project scenario coordinates into a game-local world and emit the reusable `3d-lab` renderer contract using `three-d-camera` for camera matrices.
 - Build a browser proof with `@moritzbrantner/three-d-renderer` rather than a local Three.js renderer.
+- Publish the canonical browser surface through GitHub Pages from an exact-source, reusable-workflows-qualified artifact rather than a separate demo implementation.
 
 ## 1. Playable city skeleton — current
 
