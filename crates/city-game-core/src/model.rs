@@ -308,11 +308,7 @@ impl<'de> Deserialize<'de> for CitySave {
 
 impl CitySave {
     pub fn new(scenario: CityScenario) -> Result<Self, CitySaveError> {
-        Self::new_with_config(
-            scenario,
-            CityTimeConfig::default(),
-            CityRuleset::default(),
-        )
+        Self::new_with_config(scenario, CityTimeConfig::default(), CityRuleset::default())
     }
 
     pub fn new_with_ruleset(
@@ -419,7 +415,10 @@ mod tests {
     #[test]
     fn custom_typed_rules_are_applied_when_a_save_is_created() {
         let mut ruleset = CityRuleset::default();
-        ruleset.population.config.residential_floor_area_m2_per_household = 72;
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 72;
 
         let save = CitySave::new_with_ruleset(scenario(), ruleset.clone()).unwrap();
 
