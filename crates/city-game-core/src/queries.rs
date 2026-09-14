@@ -1,10 +1,44 @@
 use std::{collections::BTreeMap, fmt};
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     CityPlanningOverlay, CityRuleset, CitySave, CityScenario, CityTimeError, CityTimePosition,
     EffectiveRoad, PopulationCapacity, PopulationError, PopulationState, RciDemand, RuleStatus,
     RuleSystem,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CityQuery {
+    Scenario,
+    Ruleset,
+    Planning,
+    Metrics,
+    TimePosition,
+    EffectiveRoads,
+    PopulationState,
+    DevelopedPopulationCapacity,
+    RciDemand,
+    RuleStatus { system: RuleSystem },
+    SystemUnlocked { system: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CityQueryResult {
+    Scenario { scenario: CityScenario },
+    Ruleset { ruleset: CityRuleset },
+    Planning { planning: CityPlanningOverlay },
+    Metrics { metrics: BTreeMap<String, i64> },
+    TimePosition { position: CityTimePosition },
+    EffectiveRoads { roads: Vec<EffectiveRoad> },
+    PopulationState { state: PopulationState },
+    DevelopedPopulationCapacity { capacity: PopulationCapacity },
+    RciDemand { demand: RciDemand },
+    RuleStatus { status: RuleStatus },
+    SystemUnlocked { unlocked: bool },
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct CityQueries<'a> {
@@ -14,6 +48,7 @@ pub struct CityQueries<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CityQueryError {
     SystemDisabled(RuleSystem),
+    Time(CityTimeError),
     Population(PopulationError),
 }
 
@@ -21,12 +56,19 @@ impl fmt::Display for CityQueryError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::SystemDisabled(system) => write!(formatter, "{system:?} rules are disabled"),
+            Self::Time(error) => error.fmt(formatter),
             Self::Population(error) => error.fmt(formatter),
         }
     }
 }
 
 impl std::error::Error for CityQueryError {}
+
+impl From<CityTimeError> for CityQueryError {
+    fn from(error: CityTimeError) -> Self {
+        Self::Time(error)
+    }
+}
 
 impl From<PopulationError> for CityQueryError {
     fn from(error: PopulationError) -> Self {
@@ -38,6 +80,47 @@ impl CitySave {
     #[must_use]
     pub fn queries(&self) -> CityQueries<'_> {
         CityQueries { save: self }
+    }
+
+    pub fn query(&self, query: CityQuery) -> Result<CityQueryResult, CityQueryError> {
+        let queries = self.queries();
+        match query {
+            CityQuery::Scenario => Ok(CityQueryResult::Scenario {
+                scenario: queries.scenario().clone(),
+            }),
+            CityQuery::Ruleset => Ok(CityQueryResult::Ruleset {
+                ruleset: queries.ruleset().clone(),
+            }),
+            CityQuery::Planning => Ok(CityQueryResult::Planning {
+                planning: queries.planning().clone(),
+            }),
+            CityQuery::Metrics => Ok(CityQueryResult::Metrics {
+                metrics: queries.metrics().clone(),
+            }),
+            CityQuery::TimePosition => Ok(CityQueryResult::TimePosition {
+                position: queries.time_position()?,
+            }),
+            CityQuery::EffectiveRoads => Ok(CityQueryResult::EffectiveRoads {
+                roads: queries.effective_roads(),
+            }),
+            CityQuery::PopulationState => Ok(CityQueryResult::PopulationState {
+                state: queries.population_state()?,
+            }),
+            CityQuery::DevelopedPopulationCapacity => {
+                Ok(CityQueryResult::DevelopedPopulationCapacity {
+                    capacity: queries.developed_population_capacity()?,
+                })
+            }
+            CityQuery::RciDemand => Ok(CityQueryResult::RciDemand {
+                demand: queries.rci_demand()?,
+            }),
+            CityQuery::RuleStatus { system } => Ok(CityQueryResult::RuleStatus {
+                status: queries.rule_status(system),
+            }),
+            CityQuery::SystemUnlocked { system } => Ok(CityQueryResult::SystemUnlocked {
+                unlocked: queries.system_unlocked(&system),
+            }),
+        }
     }
 }
 
@@ -134,6 +217,29 @@ mod tests {
     }
 
     #[test]
+    fn queries_roundtrip_as_stable_tagged_application_contract() {
+        let query = CityQuery::RuleStatus {
+            system: RuleSystem::Population,
+        };
+        let encoded = serde_json::to_value(&query).unwrap();
+        let decoded: CityQuery = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(decoded, query);
+        assert_eq!(encoded["kind"], "ruleStatus");
+        assert_eq!(encoded["system"], "population");
+    }
+
+    #[test]
+    fn query_dispatch_returns_transport_safe_result() {
+        let save = CitySave::new(scenario()).unwrap();
+        let result = save.query(CityQuery::TimePosition).unwrap();
+        let encoded = serde_json::to_value(result).unwrap();
+
+        assert_eq!(encoded["kind"], "timePosition");
+        assert_eq!(encoded["position"]["tick"], 0);
+    }
+
+    #[test]
     fn disabled_population_is_explicit_on_read_side() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
@@ -145,6 +251,10 @@ mod tests {
         );
         assert_eq!(
             save.queries().population_state(),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Population))
+        );
+        assert_eq!(
+            save.query(CityQuery::PopulationState),
             Err(CityQueryError::SystemDisabled(RuleSystem::Population))
         );
         assert_eq!(
