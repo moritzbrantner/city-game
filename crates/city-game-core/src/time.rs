@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CitySaveError, CityScenario, CityWorld};
+use crate::{CitySave, CitySaveError, CityScenario, CityWorld, RuleSystem};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
@@ -127,14 +127,18 @@ impl CitySave {
     }
 
     pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
-        self.validate_population_configuration()?;
+        if self.ruleset.is_enabled(RuleSystem::Population) {
+            self.validate_population_configuration()?;
+        }
         Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
+    use crate::{
+        ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
+    };
 
     use super::*;
 
@@ -225,5 +229,24 @@ mod tests {
             Err(CitySaveError::Time(CityTimeError::TickOverflow))
         );
         assert_eq!(overflow_save, before_overflow);
+    }
+
+    #[test]
+    fn disabled_population_does_not_gate_fixed_step_time() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.ruleset
+            .set_status(RuleSystem::Population, RuleStatus::Disabled);
+        save.population_rules = serde_json::from_str(
+            r#"{
+                "residentialFloorAreaM2PerHousehold": 0,
+                "commercialFloorAreaM2PerJob": 0,
+                "industrialFloorAreaM2PerJob": 0,
+                "initialOccupancyBasisPoints": 10001,
+                "targetOccupancyBasisPoints": 10001
+            }"#,
+        )
+        .unwrap();
+
+        assert_eq!(save.advance_tick().unwrap().tick, 1);
     }
 }
