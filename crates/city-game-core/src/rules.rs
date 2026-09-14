@@ -103,18 +103,22 @@ impl CityRuleset {
             return Err(RulesetError::UnsupportedSchemaVersion(self.schema_version));
         }
 
-        self.population
-            .config
-            .validate()
-            .map_err(RulesetError::Population)?;
+        if self.population.is_enabled() {
+            self.population
+                .config
+                .validate()
+                .map_err(RulesetError::Population)?;
+        }
 
-        let mut ids = BTreeSet::new();
-        for rule in &self.progression.config.rules {
-            if rule.id.trim().is_empty() || rule.unlocks.trim().is_empty() {
-                return Err(RulesetError::InvalidProgressionRule);
-            }
-            if !ids.insert(rule.id.clone()) {
-                return Err(RulesetError::DuplicateProgressionRuleId(rule.id.clone()));
+        if self.progression.is_enabled() {
+            let mut ids = BTreeSet::new();
+            for rule in &self.progression.config.rules {
+                if rule.id.trim().is_empty() || rule.unlocks.trim().is_empty() {
+                    return Err(RulesetError::InvalidProgressionRule);
+                }
+                if !ids.insert(rule.id.clone()) {
+                    return Err(RulesetError::DuplicateProgressionRuleId(rule.id.clone()));
+                }
             }
         }
         Ok(())
@@ -186,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_progression_rule_ids_fail_closed() {
+    fn duplicate_progression_rule_ids_fail_closed_when_progression_is_enabled() {
         let rule = ProgressionRule {
             id: "waste".to_owned(),
             unlocks: "waste-management".to_owned(),
@@ -202,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_typed_configuration_fails_even_while_disabled() {
+    fn disabled_population_configuration_is_inert_until_reenabled() {
         let mut ruleset = CityRuleset::default();
         ruleset.population.status = RuleStatus::Disabled;
         ruleset
@@ -210,6 +214,9 @@ mod tests {
             .config
             .residential_floor_area_m2_per_household = 0;
 
+        assert_eq!(ruleset.validate(), Ok(()));
+
+        ruleset.population.status = RuleStatus::Enabled;
         assert!(matches!(
             ruleset.validate(),
             Err(RulesetError::Population(PopulationError::InvalidRule(_)))
