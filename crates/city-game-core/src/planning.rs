@@ -459,7 +459,7 @@ mod tests {
     #[test]
     fn save_roundtrip_and_restart_preserve_canonical_scenario_boundary() {
         let mut save = CitySave::new(scenario());
-        save.world.advance_tick();
+        save.advance_tick().unwrap();
         save.apply_planning(PlanningCommand::ZoneArea {
             zone: PlannedZone {
                 id: "player/zone/1".to_owned(),
@@ -476,8 +476,10 @@ mod tests {
         assert_eq!(decoded, save);
 
         let scenario = save.scenario.clone();
+        let time = save.time;
         save.restart();
         assert_eq!(save.scenario, scenario);
+        assert_eq!(save.time, time);
         assert_eq!(save.world, CityWorld::default());
     }
 }
