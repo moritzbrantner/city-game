@@ -38,13 +38,5 @@ jobs:
       - name: Test Rust with locked dependencies
         run: cargo test --locked --workspace --all-features
 
-      - name: Generate browser renderer frame
-        run: cargo run --locked -p city-game-cli -- frame fixtures/demo-scenario.json web/public/demo-frame.json
-
-      - name: Install locked browser dependencies
-        working-directory: web
-        run: bun install --frozen-lockfile
-
-      - name: Build browser proof
-        working-directory: web
-        run: bun run build
+      - name: Build deployable browser proof
+        run: bash scripts/build-pages.sh
