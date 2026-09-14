@@ -27,9 +27,7 @@ impl CityTimeConfig {
 
     pub fn validate(self) -> Result<(), CityTimeError> {
         if self.minutes_per_tick == 0 || MINUTES_PER_DAY % self.minutes_per_tick != 0 {
-            return Err(CityTimeError::InvalidMinutesPerTick(
-                self.minutes_per_tick,
-            ));
+            return Err(CityTimeError::InvalidMinutesPerTick(self.minutes_per_tick));
         }
         Ok(())
     }
@@ -38,9 +36,8 @@ impl CityTimeConfig {
         self.validate()?;
         let ticks_per_day = u64::from(MINUTES_PER_DAY / self.minutes_per_tick);
         let tick_in_day = tick % ticks_per_day;
-        let minute_of_day = u16::try_from(tick_in_day)
-            .expect("tick within a day fits u16")
-            * self.minutes_per_tick;
+        let minute_of_day =
+            u16::try_from(tick_in_day).expect("tick within a day fits u16") * self.minutes_per_tick;
 
         Ok(CityTimePosition {
             tick,
@@ -129,10 +126,7 @@ impl CitySave {
         self.advance_fixed_steps(1)
     }
 
-    pub fn advance_fixed_steps(
-        &mut self,
-        steps: u64,
-    ) -> Result<CityTimePosition, CityTimeError> {
+    pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CityTimeError> {
         self.world.advance_fixed_steps(self.time, steps)
     }
 }
@@ -212,8 +206,7 @@ mod tests {
             Err(CityTimeError::InvalidMinutesPerTick(7))
         );
 
-        let invalid: CityTimeConfig =
-            serde_json::from_str(r#"{"minutesPerTick":7}"#).unwrap();
+        let invalid: CityTimeConfig = serde_json::from_str(r#"{"minutesPerTick":7}"#).unwrap();
         let mut invalid_save = CitySave::new(scenario());
         invalid_save.time = invalid;
         let before_invalid = invalid_save.clone();
