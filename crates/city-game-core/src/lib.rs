@@ -35,9 +35,7 @@ pub use render::{
     RendererCamera, RendererFrame, RendererGeometry, RendererSceneNode, RendererTransform,
     THREE_D_LAB_REVISION, build_render_frame, build_save_render_frame,
 };
-pub use rules::{
-    CityRuleset, RULESET_SCHEMA_VERSION, RuleStatus, RuleSystem, RulesetError,
-};
+pub use rules::{CityRuleset, RULESET_SCHEMA_VERSION, RuleStatus, RuleSystem, RulesetError};
 pub use time::{
     CityTimeConfig, CityTimeError, CityTimePosition, DEFAULT_MINUTES_PER_TICK, MINUTES_PER_DAY,
 };
