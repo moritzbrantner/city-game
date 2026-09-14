@@ -64,7 +64,12 @@ fn normalize_feature(feature: OsmFeature) -> ScenarioFeature {
 }
 
 fn classify(tags: &OsmTags) -> ScenarioFeatureKind {
-    if tags.contains_key("highway") {
+    if is_transit_feature(tags) {
+        ScenarioFeatureKind::Transit
+    } else if tags
+        .get("highway")
+        .is_some_and(|value| is_road_highway(value))
+    {
         ScenarioFeatureKind::Road
     } else if tags.contains_key("building") {
         ScenarioFeatureKind::Building
@@ -75,11 +80,41 @@ fn classify(tags: &OsmTags) -> ScenarioFeatureKind {
         ScenarioFeatureKind::Water
     } else if tags.contains_key("landuse") {
         ScenarioFeatureKind::LandUse
-    } else if tags.contains_key("railway") || tags.contains_key("public_transport") {
-        ScenarioFeatureKind::Transit
     } else {
         ScenarioFeatureKind::Other
     }
+}
+
+fn is_transit_feature(tags: &OsmTags) -> bool {
+    tags.contains_key("railway")
+        || tags.contains_key("public_transport")
+        || matches!(
+            tags.get("highway").map(String::as_str),
+            Some("bus_stop" | "platform")
+        )
+}
+
+fn is_road_highway(value: &str) -> bool {
+    !matches!(
+        value,
+        "bus_stop"
+            | "platform"
+            | "traffic_signals"
+            | "crossing"
+            | "stop"
+            | "give_way"
+            | "street_lamp"
+            | "speed_camera"
+            | "motorway_junction"
+            | "services"
+            | "rest_area"
+            | "turning_circle"
+            | "turning_loop"
+            | "passing_place"
+            | "milestone"
+            | "emergency_bay"
+            | "elevator"
+    )
 }
 
 fn sha256_hex(input: &[u8]) -> String {
@@ -198,5 +233,28 @@ mod tests {
                 .windows(2)
                 .all(|pair| pair[0].source_id <= pair[1].source_id)
         );
+    }
+
+    #[test]
+    fn transit_tags_take_priority_over_highway_fallback() {
+        let mut tagged_platform = OsmTags::default();
+        tagged_platform.insert("highway".to_owned(), "bus_stop".to_owned());
+        tagged_platform.insert("public_transport".to_owned(), "platform".to_owned());
+        assert_eq!(classify(&tagged_platform), ScenarioFeatureKind::Transit);
+
+        let mut legacy_bus_stop = OsmTags::default();
+        legacy_bus_stop.insert("highway".to_owned(), "bus_stop".to_owned());
+        assert_eq!(classify(&legacy_bus_stop), ScenarioFeatureKind::Transit);
+    }
+
+    #[test]
+    fn highway_point_controls_are_not_misclassified_as_roads() {
+        let mut traffic_signal = OsmTags::default();
+        traffic_signal.insert("highway".to_owned(), "traffic_signals".to_owned());
+        assert_eq!(classify(&traffic_signal), ScenarioFeatureKind::Other);
+
+        let mut residential = OsmTags::default();
+        residential.insert("highway".to_owned(), "residential".to_owned());
+        assert_eq!(classify(&residential), ScenarioFeatureKind::Road);
     }
 }
