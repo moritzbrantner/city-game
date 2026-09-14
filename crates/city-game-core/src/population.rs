@@ -159,6 +159,10 @@ impl PopulationState {
 }
 
 impl CitySave {
+    pub fn validate_population_configuration(&self) -> Result<(), PopulationError> {
+        PopulationCapacity::from_scenario(&self.scenario, self.population_rules).map(|_| ())
+    }
+
     pub fn developed_population_capacity(&self) -> Result<PopulationCapacity, PopulationError> {
         capacity_from_buildings(
             self.scenario
@@ -351,5 +355,36 @@ mod tests {
             PopulationCapacity::from_scenario(&scenario(), rules),
             Err(PopulationError::InvalidRule(_))
         ));
+    }
+
+    #[test]
+    fn save_construction_returns_capacity_overflow() {
+        let mut overflowing = scenario();
+        overflowing.buildings = vec![
+            building("residential/1", BuildingUse::Residential, u64::MAX),
+            building("residential/2", BuildingUse::Residential, u64::MAX),
+        ];
+        let rules = PopulationRules {
+            residential_floor_area_m2_per_household: 1,
+            ..PopulationRules::default()
+        };
+        let population = PopulationState::baseline_from_scenario(&overflowing, rules);
+        assert_eq!(population, Err(PopulationError::CapacityOverflow));
+
+        // `CitySave::new` uses the default divisor of 90; enough max-sized
+        // residential buildings still exceed u64 aggregate capacity.
+        overflowing.buildings = (0..100)
+            .map(|index| {
+                building(
+                    &format!("residential/{index}"),
+                    BuildingUse::Residential,
+                    u64::MAX,
+                )
+            })
+            .collect();
+        assert_eq!(
+            CitySave::new(overflowing),
+            Err(PopulationError::CapacityOverflow)
+        );
     }
 }
