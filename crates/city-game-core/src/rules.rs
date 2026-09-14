@@ -2,9 +2,9 @@ use std::{collections::BTreeSet, fmt};
 
 use serde::{Deserialize, Serialize};
 
-use crate::ProgressionRule;
+use crate::{PopulationError, PopulationRules, ProgressionRule};
 
-pub const RULESET_SCHEMA_VERSION: u32 = 1;
+pub const RULESET_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,26 +24,53 @@ pub enum RuleStatus {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RuleModule<T> {
+    pub status: RuleStatus,
+    pub config: T,
+}
+
+impl<T: Default> Default for RuleModule<T> {
+    fn default() -> Self {
+        Self {
+            status: RuleStatus::Enabled,
+            config: T::default(),
+        }
+    }
+}
+
+impl<T> RuleModule<T> {
+    #[must_use]
+    pub fn is_enabled(&self) -> bool {
+        self.status == RuleStatus::Enabled
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanningRules {}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProgressionRules {
+    pub rules: Vec<ProgressionRule>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CityRuleset {
     pub schema_version: u32,
-    #[serde(default)]
-    pub planning: RuleStatus,
-    #[serde(default)]
-    pub population: RuleStatus,
-    #[serde(default)]
-    pub progression: RuleStatus,
-    #[serde(default)]
-    pub progression_rules: Vec<ProgressionRule>,
+    pub planning: RuleModule<PlanningRules>,
+    pub population: RuleModule<PopulationRules>,
+    pub progression: RuleModule<ProgressionRules>,
 }
 
 impl Default for CityRuleset {
     fn default() -> Self {
         Self {
             schema_version: RULESET_SCHEMA_VERSION,
-            planning: RuleStatus::Enabled,
-            population: RuleStatus::Enabled,
-            progression: RuleStatus::Enabled,
-            progression_rules: Vec::new(),
+            planning: RuleModule::default(),
+            population: RuleModule::default(),
+            progression: RuleModule::default(),
         }
     }
 }
@@ -57,17 +84,17 @@ impl CityRuleset {
     #[must_use]
     pub fn status(&self, system: RuleSystem) -> RuleStatus {
         match system {
-            RuleSystem::Planning => self.planning,
-            RuleSystem::Population => self.population,
-            RuleSystem::Progression => self.progression,
+            RuleSystem::Planning => self.planning.status,
+            RuleSystem::Population => self.population.status,
+            RuleSystem::Progression => self.progression.status,
         }
     }
 
     pub fn set_status(&mut self, system: RuleSystem, status: RuleStatus) {
         match system {
-            RuleSystem::Planning => self.planning = status,
-            RuleSystem::Population => self.population = status,
-            RuleSystem::Progression => self.progression = status,
+            RuleSystem::Planning => self.planning.status = status,
+            RuleSystem::Population => self.population.status = status,
+            RuleSystem::Progression => self.progression.status = status,
         }
     }
 
@@ -76,8 +103,10 @@ impl CityRuleset {
             return Err(RulesetError::UnsupportedSchemaVersion(self.schema_version));
         }
 
+        self.population.config.validate().map_err(RulesetError::Population)?;
+
         let mut ids = BTreeSet::new();
-        for rule in &self.progression_rules {
+        for rule in &self.progression.config.rules {
             if rule.id.trim().is_empty() || rule.unlocks.trim().is_empty() {
                 return Err(RulesetError::InvalidProgressionRule);
             }
@@ -92,6 +121,7 @@ impl CityRuleset {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RulesetError {
     UnsupportedSchemaVersion(u32),
+    Population(PopulationError),
     InvalidProgressionRule,
     DuplicateProgressionRuleId(String),
 }
@@ -105,6 +135,7 @@ impl fmt::Display for RulesetError {
                     "unsupported city ruleset schema version {version}"
                 )
             }
+            Self::Population(error) => error.fmt(formatter),
             Self::InvalidProgressionRule => {
                 formatter.write_str("progression rule id and unlock target must be non-empty")
             }
@@ -122,13 +153,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rule_systems_can_be_toggled_without_rewriting_other_configuration() {
+    fn toggling_a_system_preserves_its_typed_configuration() {
         let mut ruleset = CityRuleset::default();
-        ruleset.set_status(RuleSystem::Population, RuleStatus::Disabled);
+        ruleset.population.config.residential_floor_area_m2_per_household = 72;
 
-        assert!(ruleset.is_enabled(RuleSystem::Planning));
+        ruleset.set_status(RuleSystem::Population, RuleStatus::Disabled);
         assert!(!ruleset.is_enabled(RuleSystem::Population));
-        assert!(ruleset.is_enabled(RuleSystem::Progression));
+        assert_eq!(
+            ruleset.population.config.residential_floor_area_m2_per_household,
+            72
+        );
+
+        ruleset.set_status(RuleSystem::Population, RuleStatus::Enabled);
+        assert!(ruleset.is_enabled(RuleSystem::Population));
+        assert_eq!(
+            ruleset.population.config.residential_floor_area_m2_per_household,
+            72
+        );
         assert_eq!(ruleset.validate(), Ok(()));
     }
 
@@ -139,14 +180,24 @@ mod tests {
             unlocks: "waste-management".to_owned(),
             all: Vec::new(),
         };
-        let ruleset = CityRuleset {
-            progression_rules: vec![rule.clone(), rule],
-            ..CityRuleset::default()
-        };
+        let mut ruleset = CityRuleset::default();
+        ruleset.progression.config.rules = vec![rule.clone(), rule];
 
         assert_eq!(
             ruleset.validate(),
             Err(RulesetError::DuplicateProgressionRuleId("waste".to_owned()))
         );
+    }
+
+    #[test]
+    fn invalid_typed_configuration_fails_even_while_disabled() {
+        let mut ruleset = CityRuleset::default();
+        ruleset.population.status = RuleStatus::Disabled;
+        ruleset.population.config.residential_floor_area_m2_per_household = 0;
+
+        assert!(matches!(
+            ruleset.validate(),
+            Err(RulesetError::Population(PopulationError::InvalidRule(_)))
+        ));
     }
 }
