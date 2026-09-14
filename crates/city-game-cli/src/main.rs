@@ -33,9 +33,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         _ => {
             eprintln!("usage:");
             eprintln!("  city-game-cli import <input.osm.pbf> <scenario.json>");
-            eprintln!(
-                "  city-game-cli new-save <scenario.json> <save.json> [minutes-per-tick]"
-            );
+            eprintln!("  city-game-cli new-save <scenario.json> <save.json> [minutes-per-tick]");
             eprintln!("  city-game-cli step <save.json> <output-save.json> <steps>");
             eprintln!("  city-game-cli frame <scenario.json> <frame.json> [aspect]");
             std::process::exit(2);
@@ -53,11 +51,7 @@ fn import(input: &str, output: &str) -> Result<(), Box<dyn Error>> {
     write_json(output, &scenario)
 }
 
-fn new_save(
-    input: &str,
-    output: &str,
-    time: CityTimeConfig,
-) -> Result<(), Box<dyn Error>> {
+fn new_save(input: &str, output: &str, time: CityTimeConfig) -> Result<(), Box<dyn Error>> {
     let scenario: CityScenario = serde_json::from_slice(&fs::read(input)?)?;
     let save = CitySave::new_with_time_config(scenario, time)?;
     write_json(output, &save)
