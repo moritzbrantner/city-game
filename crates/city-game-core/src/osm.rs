@@ -7,8 +7,9 @@ use geo_io_osm::{
 use sha2::{Digest, Sha256};
 
 use crate::{
-    CityScenario, ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioFeature, ScenarioFeatureKind,
-    ScenarioProvenance,
+    BuildingUse, CityScenario, ExternalRevision, LandUseKind, RoadClass, SCENARIO_SCHEMA_VERSION,
+    ScenarioBuilding, ScenarioLandUse, ScenarioProvenance, ScenarioRoad, ScenarioTransitAnchor,
+    ScenarioWater, TransitKind, WaterKind,
 };
 
 pub const GEO_ANALYSIS_REVISION: &str = "c4df63a023f2183d700a9a28071d732d345e7c25";
@@ -31,12 +32,28 @@ pub fn import_osm_pbf_bytes(
         index_options: IndexOptions::default(),
     })?;
 
-    let mut features = collected
-        .features
-        .into_iter()
-        .map(normalize_feature)
-        .collect::<Vec<_>>();
-    features.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+    let mut roads = Vec::new();
+    let mut buildings = Vec::new();
+    let mut water = Vec::new();
+    let mut land_use_areas = Vec::new();
+    let mut transit_anchors = Vec::new();
+
+    for feature in collected.features {
+        match normalize_feature(feature) {
+            NormalizedFeature::Road(value) => roads.push(value),
+            NormalizedFeature::Building(value) => buildings.push(value),
+            NormalizedFeature::Water(value) => water.push(value),
+            NormalizedFeature::LandUse(value) => land_use_areas.push(value),
+            NormalizedFeature::Transit(value) => transit_anchors.push(value),
+            NormalizedFeature::Ignore => {}
+        }
+    }
+
+    roads.sort_by(|left, right| left.id.cmp(&right.id));
+    buildings.sort_by(|left, right| left.id.cmp(&right.id));
+    water.sort_by(|left, right| left.id.cmp(&right.id));
+    land_use_areas.sort_by(|left, right| left.id.cmp(&right.id));
+    transit_anchors.sort_by(|left, right| left.id.cmp(&right.id));
 
     Ok(CityScenario {
         schema_version: SCENARIO_SCHEMA_VERSION,
@@ -49,39 +66,106 @@ pub fn import_osm_pbf_bytes(
                 revision: GEO_ANALYSIS_REVISION.to_owned(),
             },
         },
-        features,
+        roads,
+        buildings,
+        water,
+        land_use_areas,
+        transit_anchors,
     })
 }
 
-fn normalize_feature(feature: OsmFeature) -> ScenarioFeature {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImportedKind {
+    Road,
+    Building,
+    Water,
+    LandUse,
+    Transit,
+    Ignore,
+}
+
+enum NormalizedFeature {
+    Road(ScenarioRoad),
+    Building(ScenarioBuilding),
+    Water(ScenarioWater),
+    LandUse(ScenarioLandUse),
+    Transit(ScenarioTransitAnchor),
+    Ignore,
+}
+
+fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
+    let source_id = feature.stable_id();
+    let id = format!("imported/{source_id}");
     let kind = classify(&feature.tags);
-    ScenarioFeature {
-        source_id: feature.stable_id(),
-        kind,
-        tags: feature.tags,
-        geometry: feature.geometry,
+    let name = feature.tags.get("name").cloned();
+
+    match kind {
+        ImportedKind::Road => NormalizedFeature::Road(ScenarioRoad {
+            id,
+            source_id,
+            class: road_class(&feature.tags),
+            name,
+            lanes: feature.tags.get("lanes").and_then(|value| parse_lanes(value)),
+            max_speed_kph: feature
+                .tags
+                .get("maxspeed")
+                .and_then(|value| parse_max_speed_kph(value)),
+            geometry: feature.geometry,
+        }),
+        ImportedKind::Building => NormalizedFeature::Building(ScenarioBuilding {
+            id,
+            source_id,
+            use_kind: building_use(&feature.tags),
+            name,
+            levels: feature
+                .tags
+                .get("building:levels")
+                .and_then(|value| parse_positive_u16(value)),
+            height_m: feature.tags.get("height").and_then(|value| parse_height_m(value)),
+            footprint: feature.geometry,
+        }),
+        ImportedKind::Water => NormalizedFeature::Water(ScenarioWater {
+            id,
+            source_id,
+            kind: water_kind(&feature.tags),
+            geometry: feature.geometry,
+        }),
+        ImportedKind::LandUse => NormalizedFeature::LandUse(ScenarioLandUse {
+            id,
+            source_id,
+            kind: land_use_kind(&feature.tags),
+            geometry: feature.geometry,
+        }),
+        ImportedKind::Transit => NormalizedFeature::Transit(ScenarioTransitAnchor {
+            id,
+            source_id,
+            kind: transit_kind(&feature.tags),
+            name,
+            geometry: feature.geometry,
+        }),
+        ImportedKind::Ignore => NormalizedFeature::Ignore,
     }
 }
 
-fn classify(tags: &OsmTags) -> ScenarioFeatureKind {
+fn classify(tags: &OsmTags) -> ImportedKind {
     if is_transit_feature(tags) {
-        ScenarioFeatureKind::Transit
+        ImportedKind::Transit
     } else if tags
         .get("highway")
         .is_some_and(|value| is_road_highway(value))
     {
-        ScenarioFeatureKind::Road
+        ImportedKind::Road
     } else if tags.contains_key("building") {
-        ScenarioFeatureKind::Building
+        ImportedKind::Building
     } else if tags.get("natural").is_some_and(|value| value == "water")
         || tags.contains_key("water")
         || tags.contains_key("waterway")
     {
-        ScenarioFeatureKind::Water
+        ImportedKind::Water
     } else if tags.contains_key("landuse") {
-        ScenarioFeatureKind::LandUse
+        ImportedKind::LandUse
     } else {
-        ScenarioFeatureKind::Other
+        ImportedKind::Ignore
     }
 }
 
@@ -117,6 +201,127 @@ fn is_road_highway(value: &str) -> bool {
     )
 }
 
+fn road_class(tags: &OsmTags) -> RoadClass {
+    match tags.get("highway").map(String::as_str) {
+        Some("motorway" | "motorway_link") => RoadClass::Motorway,
+        Some("trunk" | "trunk_link") => RoadClass::Trunk,
+        Some("primary" | "primary_link") => RoadClass::Primary,
+        Some("secondary" | "secondary_link") => RoadClass::Secondary,
+        Some("tertiary" | "tertiary_link") => RoadClass::Tertiary,
+        Some("residential" | "living_street" | "unclassified") => RoadClass::Residential,
+        Some("service") => RoadClass::Service,
+        Some("track") => RoadClass::Track,
+        Some("pedestrian") => RoadClass::Pedestrian,
+        Some("cycleway") => RoadClass::Cycleway,
+        Some("footway" | "path" | "steps") => RoadClass::Footway,
+        _ => RoadClass::Other,
+    }
+}
+
+fn building_use(tags: &OsmTags) -> BuildingUse {
+    match tags.get("building").map(String::as_str) {
+        Some(
+            "apartments" | "house" | "residential" | "detached" | "semidetached_house"
+            | "terrace" | "dormitory",
+        ) => BuildingUse::Residential,
+        Some("commercial" | "retail" | "office" | "hotel") => BuildingUse::Commercial,
+        Some("industrial" | "warehouse" | "manufacture") => BuildingUse::Industrial,
+        Some(
+            "school" | "hospital" | "civic" | "government" | "public" | "church"
+            | "cathedral" | "chapel",
+        ) => BuildingUse::Civic,
+        Some("farm" | "farm_auxiliary" | "barn" | "stable" | "greenhouse") => {
+            BuildingUse::Agricultural
+        }
+        _ => BuildingUse::Other,
+    }
+}
+
+fn water_kind(tags: &OsmTags) -> WaterKind {
+    match tags.get("waterway").map(String::as_str) {
+        Some("river") => WaterKind::River,
+        Some("stream") => WaterKind::Stream,
+        Some("canal") => WaterKind::Canal,
+        Some(_) => WaterKind::Other,
+        None if tags.get("natural").is_some_and(|value| value == "water")
+            || tags.contains_key("water") =>
+        {
+            WaterKind::Body
+        }
+        None => WaterKind::Other,
+    }
+}
+
+fn land_use_kind(tags: &OsmTags) -> LandUseKind {
+    match tags.get("landuse").map(String::as_str) {
+        Some("residential") => LandUseKind::Residential,
+        Some("commercial") => LandUseKind::Commercial,
+        Some("industrial") => LandUseKind::Industrial,
+        Some("retail") => LandUseKind::Retail,
+        Some("forest") => LandUseKind::Forest,
+        Some("farmland" | "farmyard" | "orchard" | "vineyard") => LandUseKind::Farmland,
+        Some("recreation_ground" | "village_green" | "grass") => LandUseKind::Recreation,
+        Some("cemetery") => LandUseKind::Cemetery,
+        _ => LandUseKind::Other,
+    }
+}
+
+fn transit_kind(tags: &OsmTags) -> TransitKind {
+    match (
+        tags.get("highway").map(String::as_str),
+        tags.get("public_transport").map(String::as_str),
+        tags.get("railway").map(String::as_str),
+    ) {
+        (Some("bus_stop"), _, _) => TransitKind::BusStop,
+        (_, Some("platform"), _) | (Some("platform"), _, _) => TransitKind::Platform,
+        (_, _, Some("station" | "halt")) => TransitKind::Station,
+        (_, _, Some("tram_stop")) => TransitKind::TramStop,
+        (_, Some("stop_position"), _) => TransitKind::StopPosition,
+        (_, _, Some(_)) => TransitKind::Rail,
+        _ => TransitKind::Other,
+    }
+}
+
+fn parse_lanes(value: &str) -> Option<u8> {
+    value
+        .split([';', '|'])
+        .next()?
+        .trim()
+        .parse::<u8>()
+        .ok()
+        .filter(|lanes| *lanes > 0 && *lanes <= 32)
+}
+
+fn parse_max_speed_kph(value: &str) -> Option<u16> {
+    let normalized = value.trim().strip_suffix(" km/h").unwrap_or(value.trim());
+    if normalized.ends_with("mph") {
+        return None;
+    }
+    normalized
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|speed| *speed > 0 && *speed <= 300)
+}
+
+fn parse_positive_u16(value: &str) -> Option<u16> {
+    value
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|value| *value > 0)
+}
+
+fn parse_height_m(value: &str) -> Option<f32> {
+    value
+        .trim_end_matches('m')
+        .trim()
+        .parse::<f32>()
+        .ok()
+        .filter(|height| height.is_finite() && *height > 0.0)
+        .map(|height| height.clamp(0.5, 1_000.0))
+}
+
 fn sha256_hex(input: &[u8]) -> String {
     let digest = Sha256::digest(input);
     let mut encoded = String::with_capacity(digest.len() * 2);
@@ -144,8 +349,14 @@ mod tests {
             "name",
             "Synthetic Road",
             "building",
-            "yes",
+            "apartments",
             "Synthetic Building",
+            "building:levels",
+            "4",
+            "lanes",
+            "2",
+            "maxspeed",
+            "50",
         ] {
             string_table.mut_s().push(value.as_bytes().to_vec());
         }
@@ -172,14 +383,14 @@ mod tests {
 
         let mut road = osmformat::Way::new();
         road.set_id(10);
-        road.keys = vec![1, 3];
-        road.vals = vec![2, 4];
+        road.keys = vec![1, 3, 10, 12];
+        road.vals = vec![2, 4, 11, 13];
         road.refs = vec![1, 1, 1];
 
         let mut building = osmformat::Way::new();
         building.set_id(20);
-        building.keys = vec![5, 3];
-        building.vals = vec![6, 7];
+        building.keys = vec![5, 3, 8];
+        building.vals = vec![6, 7, 9];
         building.refs = vec![3, 1, 1, -2];
 
         let mut group = osmformat::PrimitiveGroup::new();
@@ -213,7 +424,7 @@ mod tests {
     }
 
     #[test]
-    fn real_parser_boundary_produces_stable_game_features_and_provenance() {
+    fn real_parser_boundary_produces_canonical_game_semantics_and_provenance() {
         let bytes = synthetic_pbf_bytes();
         let first = import_osm_pbf_bytes("synthetic.osm.pbf", &bytes).unwrap();
         let second = import_osm_pbf_bytes("synthetic.osm.pbf", &bytes).unwrap();
@@ -221,18 +432,20 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.provenance.parser.revision, GEO_ANALYSIS_REVISION);
         assert_eq!(first.provenance.source_sha256.len(), 64);
-        assert!(first.features.iter().any(|feature| {
-            feature.source_id == "way/10" && feature.kind == ScenarioFeatureKind::Road
-        }));
-        assert!(first.features.iter().any(|feature| {
-            feature.source_id == "way/20" && feature.kind == ScenarioFeatureKind::Building
-        }));
-        assert!(
-            first
-                .features
-                .windows(2)
-                .all(|pair| pair[0].source_id <= pair[1].source_id)
-        );
+        assert_eq!(first.roads.len(), 1);
+        assert_eq!(first.roads[0].id, "imported/way/10");
+        assert_eq!(first.roads[0].source_id, "way/10");
+        assert_eq!(first.roads[0].class, RoadClass::Residential);
+        assert_eq!(first.roads[0].lanes, Some(2));
+        assert_eq!(first.roads[0].max_speed_kph, Some(50));
+        assert_eq!(first.buildings.len(), 1);
+        assert_eq!(first.buildings[0].use_kind, BuildingUse::Residential);
+        assert_eq!(first.buildings[0].levels, Some(4));
+
+        let encoded = serde_json::to_string(&first).unwrap();
+        assert!(!encoded.contains("\"tags\""));
+        assert!(!encoded.contains("\"highway\""));
+        assert!(!encoded.contains("\"building:levels\""));
     }
 
     #[test]
@@ -240,21 +453,23 @@ mod tests {
         let mut tagged_platform = OsmTags::default();
         tagged_platform.insert("highway".to_owned(), "bus_stop".to_owned());
         tagged_platform.insert("public_transport".to_owned(), "platform".to_owned());
-        assert_eq!(classify(&tagged_platform), ScenarioFeatureKind::Transit);
+        assert_eq!(classify(&tagged_platform), ImportedKind::Transit);
+        assert_eq!(transit_kind(&tagged_platform), TransitKind::BusStop);
 
         let mut legacy_bus_stop = OsmTags::default();
         legacy_bus_stop.insert("highway".to_owned(), "bus_stop".to_owned());
-        assert_eq!(classify(&legacy_bus_stop), ScenarioFeatureKind::Transit);
+        assert_eq!(classify(&legacy_bus_stop), ImportedKind::Transit);
     }
 
     #[test]
-    fn highway_point_controls_are_not_misclassified_as_roads() {
+    fn highway_point_controls_are_not_imported_as_roads() {
         let mut traffic_signal = OsmTags::default();
         traffic_signal.insert("highway".to_owned(), "traffic_signals".to_owned());
-        assert_eq!(classify(&traffic_signal), ScenarioFeatureKind::Other);
+        assert_eq!(classify(&traffic_signal), ImportedKind::Ignore);
 
         let mut residential = OsmTags::default();
         residential.insert("highway".to_owned(), "residential".to_owned());
-        assert_eq!(classify(&residential), ScenarioFeatureKind::Road);
+        assert_eq!(classify(&residential), ImportedKind::Road);
+        assert_eq!(road_class(&residential), RoadClass::Residential);
     }
 }
