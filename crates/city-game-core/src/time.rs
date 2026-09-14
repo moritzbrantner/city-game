@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CitySaveError, CityScenario, CityWorld};
+use crate::{CityRuleset, CitySave, CitySaveError, CityScenario, CityWorld};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
@@ -110,10 +110,7 @@ impl CitySave {
         scenario: CityScenario,
         time: CityTimeConfig,
     ) -> Result<Self, CitySaveError> {
-        time.validate()?;
-        let mut save = Self::new(scenario)?;
-        save.time = time;
-        Ok(save)
+        Self::new_with_config(scenario, time, CityRuleset::default())
     }
 
     pub(crate) fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
