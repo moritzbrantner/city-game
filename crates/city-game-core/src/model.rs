@@ -364,6 +364,26 @@ mod tests {
         }
     }
 
+    fn residential_building(id: &str, gross_floor_area_m2: u64) -> ScenarioBuilding {
+        ScenarioBuilding {
+            id: id.to_owned(),
+            source_id: id.to_owned(),
+            footprint: Geometry::Polygon {
+                coordinates: vec![vec![
+                    [8.0, 48.0],
+                    [8.001, 48.0],
+                    [8.001, 48.001],
+                    [8.0, 48.0],
+                ]],
+            },
+            use_kind: BuildingUse::Residential,
+            name: None,
+            levels: Some(1),
+            height_m: Some(3.0),
+            gross_floor_area_m2,
+        }
+    }
+
     #[test]
     fn save_roundtrip_preserves_current_scenario_clock_and_ruleset() {
         let mut save = CitySave::new(scenario()).unwrap();
@@ -418,5 +438,31 @@ mod tests {
         let save = CitySave::new_with_ruleset(scenario(), ruleset.clone()).unwrap();
 
         assert_eq!(save.ruleset, ruleset);
+    }
+
+    #[test]
+    fn current_save_load_rejects_population_capacity_overflow() {
+        let mut overflowing_scenario = scenario();
+        overflowing_scenario.buildings = vec![
+            residential_building("residential/1", u64::MAX),
+            residential_building("residential/2", u64::MAX),
+        ];
+        let mut ruleset = CityRuleset::default();
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 1;
+        let invalid = CitySave {
+            schema_version: SAVE_SCHEMA_VERSION,
+            scenario: overflowing_scenario,
+            time: CityTimeConfig::default(),
+            ruleset,
+            world: CityWorld::default(),
+        };
+
+        let encoded = serde_json::to_string(&invalid).unwrap();
+        let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
+
+        assert!(error.to_string().contains("population capacity overflow"));
     }
 }
