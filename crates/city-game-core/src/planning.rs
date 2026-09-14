@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use geo_core::Geometry;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{CitySave, CityScenario, CityWorld, PopulationError, RoadClass};
 
@@ -33,12 +33,36 @@ pub struct PlannedZone {
     pub kind: ZoneKind,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CityPlanningOverlay {
     pub player_roads: BTreeMap<String, PlannedRoad>,
     pub zones: BTreeMap<String, PlannedZone>,
     pub suppressed_scenario_entities: BTreeSet<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CityPlanningOverlayWire {
+    player_roads: BTreeMap<String, PlannedRoad>,
+    zones: BTreeMap<String, PlannedZone>,
+    suppressed_scenario_entities: BTreeSet<String>,
+}
+
+impl<'de> Deserialize<'de> for CityPlanningOverlay {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = CityPlanningOverlayWire::deserialize(deserializer)?;
+        let overlay = Self {
+            player_roads: wire.player_roads,
+            zones: wire.zones,
+            suppressed_scenario_entities: wire.suppressed_scenario_entities,
+        };
+        overlay.validate_loaded().map_err(D::Error::custom)?;
+        Ok(overlay)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,6 +87,7 @@ pub enum PlanningError {
     InvalidId,
     InvalidRoadGeometry,
     InvalidZoneGeometry,
+    MismatchedPlayerEntityKey { key: String, id: String },
     ConflictingPlayerEntityId(String),
     ScenarioEntityIdReserved(String),
     UnknownScenarioEntity(String),
@@ -78,6 +103,10 @@ impl fmt::Display for PlanningError {
             Self::InvalidZoneGeometry => {
                 formatter.write_str("zone geometry must be a polygon or multipolygon")
             }
+            Self::MismatchedPlayerEntityKey { key, id } => write!(
+                formatter,
+                "persisted player entity map key {key} does not match nested id {id}"
+            ),
             Self::ConflictingPlayerEntityId(id) => {
                 write!(
                     formatter,
@@ -199,6 +228,63 @@ impl CityPlanningOverlay {
         }));
         roads.sort_by(|left, right| left.id.cmp(&right.id));
         roads
+    }
+
+    pub(crate) fn validate_against_scenario(
+        &self,
+        scenario: &CityScenario,
+    ) -> Result<(), PlanningError> {
+        self.validate_loaded()?;
+
+        for id in self.player_roads.keys().chain(self.zones.keys()) {
+            if scenario.contains_entity(id) {
+                return Err(PlanningError::ScenarioEntityIdReserved(id.clone()));
+            }
+        }
+        for id in &self.suppressed_scenario_entities {
+            if !scenario.contains_entity(id) {
+                return Err(PlanningError::UnknownScenarioEntity(id.clone()));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_loaded(&self) -> Result<(), PlanningError> {
+        for (key, road) in &self.player_roads {
+            validate_id(key)?;
+            validate_id(&road.id)?;
+            if key != &road.id {
+                return Err(PlanningError::MismatchedPlayerEntityKey {
+                    key: key.clone(),
+                    id: road.id.clone(),
+                });
+            }
+            if !valid_road_geometry(&road.geometry) {
+                return Err(PlanningError::InvalidRoadGeometry);
+            }
+            if self.zones.contains_key(key) {
+                return Err(PlanningError::ConflictingPlayerEntityId(key.clone()));
+            }
+        }
+
+        for (key, zone) in &self.zones {
+            validate_id(key)?;
+            validate_id(&zone.id)?;
+            if key != &zone.id {
+                return Err(PlanningError::MismatchedPlayerEntityKey {
+                    key: key.clone(),
+                    id: zone.id.clone(),
+                });
+            }
+            if !valid_zone_geometry(&zone.geometry) {
+                return Err(PlanningError::InvalidZoneGeometry);
+            }
+        }
+
+        for id in &self.suppressed_scenario_entities {
+            validate_id(id)?;
+        }
+        Ok(())
     }
 
     fn add_road(
@@ -460,6 +546,61 @@ mod tests {
         let roads = save.effective_roads();
         assert_eq!(roads.len(), 1);
         assert_eq!(roads[0].id, "player/road/1");
+    }
+
+    #[test]
+    fn save_deserialization_rejects_invalid_planning_state() {
+        let mut mismatched_key = CitySave::new(scenario());
+        mismatched_key.world.planning.player_roads.insert(
+            "slot".to_owned(),
+            PlannedRoad {
+                id: "player/road/1".to_owned(),
+                geometry: line(8.01),
+                class: RoadClass::Residential,
+                name: None,
+            },
+        );
+        let encoded = serde_json::to_string(&mismatched_key).unwrap();
+        let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
+        assert!(error.to_string().contains("does not match nested id"));
+
+        let mut scenario_collision = CitySave::new(scenario());
+        scenario_collision.world.planning.player_roads.insert(
+            "imported/way/10".to_owned(),
+            PlannedRoad {
+                id: "imported/way/10".to_owned(),
+                geometry: line(8.01),
+                class: RoadClass::Residential,
+                name: None,
+            },
+        );
+        let encoded = serde_json::to_string(&scenario_collision).unwrap();
+        let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("reserved by the imported scenario")
+        );
+
+        let mut invalid_geometry = CitySave::new(scenario());
+        invalid_geometry.world.planning.player_roads.insert(
+            "player/road/1".to_owned(),
+            PlannedRoad {
+                id: "player/road/1".to_owned(),
+                geometry: Geometry::Point {
+                    coordinates: [8.01, 48.0],
+                },
+                class: RoadClass::Residential,
+                name: None,
+            },
+        );
+        let encoded = serde_json::to_string(&invalid_geometry).unwrap();
+        let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("must contain at least one line segment")
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fmt};
 
 use geo_core::Geometry;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{
     CityPlanningOverlay, CityTimeConfig, CityTimeError, PopulationError, PopulationRules,
@@ -183,7 +183,7 @@ pub struct CityWorld {
     pub population: PopulationState,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitySave {
     pub schema_version: u32,
@@ -220,6 +220,38 @@ impl From<PopulationError> for CitySaveError {
     fn from(error: PopulationError) -> Self {
         Self::Population(error)
     }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CitySaveWire {
+    schema_version: u32,
+    scenario: CityScenario,
+    #[serde(default)]
+    time: CityTimeConfig,
+    #[serde(default)]
+    population_rules: PopulationRules,
+    world: CityWorld,
+}
+
+impl<'de> Deserialize<'de> for CitySave {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let wire = CitySaveWire::deserialize(deserializer)?;
+        wire.world
+            .planning
+            .validate_against_scenario(&wire.scenario)
+            .map_err(D::Error::custom)?;
+
+        Ok(Self {
+            schema_version: wire.schema_version,
+            scenario: wire.scenario,
+            time: wire.time,
+            population_rules: wire.population_rules,
+            world: wire.world,
+        })
 }
 
 impl CitySave {
