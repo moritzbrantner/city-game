@@ -6,14 +6,19 @@ license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [dependencies]
 geo-core.workspace = true
-geo-io-osm.workspace = true
 serde.workspace = true
 serde-json.workspace = true
 sha2.workspace = true
 three-d-camera.workspace = true
 three-d-core.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+geo-io-osm.workspace = true
 
 [dev-dependencies]
 osmpbfreader.workspace = true
