@@ -1,13 +1,16 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize, Serializer};
+
 use crate::{
     CitySave, CitySaveError, CityTimePosition, CityWorld, PlanningCommand, PlanningError,
     PlanningOutcome, PopulationError, RuleSystem, RulesetError,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CityCommand {
-    Planning(PlanningCommand),
+    Planning { command: PlanningCommand },
     AdvanceFixedSteps { steps: u64 },
     EvaluateProgression,
     Restart,
@@ -19,6 +22,37 @@ pub enum CityCommandOutcome {
     Advanced(CityTimePosition),
     ProgressionEvaluated { newly_unlocked: Vec<String> },
     Restarted,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum CityCommandOutcomeWire<'a> {
+    Planning { outcome: &'static str },
+    Advanced { position: &'a CityTimePosition },
+    ProgressionEvaluated { newly_unlocked: &'a [String] },
+    Restarted,
+}
+
+impl Serialize for CityCommandOutcome {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let wire = match self {
+            Self::Planning(PlanningOutcome::Applied) => CityCommandOutcomeWire::Planning {
+                outcome: "applied",
+            },
+            Self::Planning(PlanningOutcome::Unchanged) => CityCommandOutcomeWire::Planning {
+                outcome: "unchanged",
+            },
+            Self::Advanced(position) => CityCommandOutcomeWire::Advanced { position },
+            Self::ProgressionEvaluated { newly_unlocked } => {
+                CityCommandOutcomeWire::ProgressionEvaluated { newly_unlocked }
+            }
+            Self::Restarted => CityCommandOutcomeWire::Restarted,
+        };
+        wire.serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,7 +110,7 @@ impl CitySave {
         self.ruleset.validate()?;
 
         match command {
-            CityCommand::Planning(command) => {
+            CityCommand::Planning { command } => {
                 if !self.ruleset.is_enabled(RuleSystem::Planning) {
                     return Err(CityCommandError::SystemDisabled(RuleSystem::Planning));
                 }
@@ -135,6 +169,41 @@ mod tests {
     }
 
     #[test]
+    fn commands_roundtrip_as_stable_tagged_application_contract() {
+        let command = CityCommand::Planning {
+            command: PlanningCommand::RemovePlayerRoad {
+                id: "player/road/1".to_owned(),
+            },
+        };
+        let encoded = serde_json::to_value(&command).unwrap();
+        let decoded: CityCommand = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(decoded, command);
+        assert_eq!(encoded["kind"], "planning");
+        assert_eq!(encoded["command"]["kind"], "removePlayerRoad");
+        assert_eq!(encoded["command"]["id"], "player/road/1");
+    }
+
+    #[test]
+    fn command_outcomes_have_transport_safe_shape() {
+        let planning = serde_json::to_value(CityCommandOutcome::Planning(
+            PlanningOutcome::Applied,
+        ))
+        .unwrap();
+        let advanced = serde_json::to_value(CityCommandOutcome::Advanced(CityTimePosition {
+            tick: 4,
+            day: 1,
+            minute_of_day: 60,
+        }))
+        .unwrap();
+
+        assert_eq!(planning["kind"], "planning");
+        assert_eq!(planning["outcome"], "applied");
+        assert_eq!(advanced["kind"], "advanced");
+        assert_eq!(advanced["position"]["tick"], 4);
+    }
+
+    #[test]
     fn disabled_planning_rejects_write_without_mutation() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
@@ -142,9 +211,11 @@ mod tests {
         let before = save.clone();
 
         assert_eq!(
-            save.execute(CityCommand::Planning(PlanningCommand::RemovePlayerRoad {
-                id: "player/road/1".to_owned(),
-            })),
+            save.execute(CityCommand::Planning {
+                command: PlanningCommand::RemovePlayerRoad {
+                    id: "player/road/1".to_owned(),
+                },
+            }),
             Err(CityCommandError::SystemDisabled(RuleSystem::Planning))
         );
         assert_eq!(save, before);
