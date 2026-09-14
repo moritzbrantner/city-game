@@ -69,7 +69,10 @@ impl From<PopulationError> for CityCommandError {
 }
 
 impl CitySave {
-    pub fn execute(&mut self, command: CityCommand) -> Result<CityCommandOutcome, CityCommandError> {
+    pub fn execute(
+        &mut self,
+        command: CityCommand,
+    ) -> Result<CityCommandOutcome, CityCommandError> {
         self.ruleset.validate()?;
 
         match command {
