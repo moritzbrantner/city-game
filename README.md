@@ -49,18 +49,23 @@ Zoning is intentionally not capacity. A residential/commercial/industrial zone m
 
 `CitySave` stores the game-native scenario together with fixed-step configuration, population rules, and mutable world state. Save/resume preserves these aggregates exactly, while scenario restart reseeds the original scenario-derived population baseline.
 
+## GitHub Pages
+
+The browser version is a required delivery surface for `city-game`. The canonical project-site URL is:
+
+`https://moritzbrantner.github.io/city-game/`
+
+`bash scripts/build-pages.sh` is the repository-owned build contract used by both validation and Pages delivery. It regenerates the browser renderer frame through `city-game-cli`, installs the locked Bun dependencies, builds `web/dist`, and verifies the relative assets required for project-site hosting.
+
+Pushes to `main` are delivered through the shared `reusable-workflows` build-artifact and Pages workflows. The deploy job consumes the exact verified artifact produced for the source commit rather than rebuilding it during deployment. If GitHub Pages has not yet been enabled for the repository, the Pages preflight reports the one-time repository setting instead of treating an absent deployment as green.
+
 ## Development
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
-
-mkdir -p web/public
-cargo run -p city-game-cli -- frame fixtures/demo-scenario.json web/public/demo-frame.json
-cd web
-bun install
-bun run build
+bash scripts/build-pages.sh
 ```
 
 For a real scenario:
