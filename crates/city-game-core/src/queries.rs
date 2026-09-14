@@ -78,3 +78,58 @@ impl CityQueries<'_> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        CityScenario, ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
+    };
+
+    use super::*;
+
+    fn scenario() -> CityScenario {
+        CityScenario {
+            schema_version: SCENARIO_SCHEMA_VERSION,
+            provenance: ScenarioProvenance {
+                source_format: "fixture".to_owned(),
+                source_name: "queries".to_owned(),
+                source_sha256: "queries".to_owned(),
+                parser: ExternalRevision {
+                    repository: "fixture".to_owned(),
+                    revision: "fixture".to_owned(),
+                },
+            },
+            roads: Vec::new(),
+            buildings: Vec::new(),
+            water: Vec::new(),
+            land_use_areas: Vec::new(),
+            transit_anchors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn disabled_population_is_explicit_on_read_side() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.ruleset
+            .set_status(RuleSystem::Population, RuleStatus::Disabled);
+
+        assert_eq!(
+            save.queries().rci_demand(),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Population))
+        );
+        assert_eq!(
+            save.queries().rule_status(RuleSystem::Population),
+            RuleStatus::Disabled
+        );
+    }
+
+    #[test]
+    fn unrelated_queries_remain_available_when_population_is_disabled() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.ruleset
+            .set_status(RuleSystem::Population, RuleStatus::Disabled);
+
+        assert_eq!(save.queries().time_position().unwrap().tick, 0);
+        assert!(save.queries().effective_roads().is_empty());
+    }
+}
