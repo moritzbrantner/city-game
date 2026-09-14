@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CityWorld};
+use crate::{CitySave, CityScenario, CityWorld};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
@@ -26,9 +26,7 @@ impl CityTimeConfig {
     }
 
     pub fn validate(self) -> Result<(), CityTimeError> {
-        if self.minutes_per_tick == 0
-            || MINUTES_PER_DAY % self.minutes_per_tick != 0
-        {
+        if self.minutes_per_tick == 0 || MINUTES_PER_DAY % self.minutes_per_tick != 0 {
             return Err(CityTimeError::InvalidMinutesPerTick(
                 self.minutes_per_tick,
             ));
@@ -89,27 +87,20 @@ impl fmt::Display for CityTimeError {
 impl std::error::Error for CityTimeError {}
 
 impl CityWorld {
-    pub fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
-        self.time.position(self.tick)
-    }
-
-    pub fn advance_tick(&mut self) -> Result<CityTimePosition, CityTimeError> {
-        self.advance_fixed_steps(1)
-    }
-
-    pub fn advance_fixed_steps(
+    fn advance_fixed_steps(
         &mut self,
+        time: CityTimeConfig,
         steps: u64,
     ) -> Result<CityTimePosition, CityTimeError> {
-        self.time.validate()?;
+        time.validate()?;
         let final_tick = self
             .tick
             .checked_add(steps)
             .ok_or(CityTimeError::TickOverflow)?;
-        let final_position = self.time.position(final_tick)?;
+        let final_position = time.position(final_tick)?;
 
-        // Keep this as an explicit fixed-step loop so later simulation systems can be
-        // inserted here without changing the authoritative meaning of a step.
+        // Keep an explicit fixed-step loop so future city systems can be inserted
+        // here without making wall-clock frame duration part of simulation semantics.
         for _ in 0..steps {
             self.tick += 1;
         }
@@ -121,32 +112,34 @@ impl CityWorld {
 
 impl CitySave {
     pub fn new_with_time_config(
-        scenario: crate::CityScenario,
+        scenario: CityScenario,
         time: CityTimeConfig,
     ) -> Result<Self, CityTimeError> {
         time.validate()?;
         let mut save = Self::new(scenario);
-        save.world.time = time;
+        save.time = time;
         Ok(save)
     }
 
     pub fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
-        self.world.time_position()
+        self.time.position(self.world.tick)
+    }
+
+    pub fn advance_tick(&mut self) -> Result<CityTimePosition, CityTimeError> {
+        self.advance_fixed_steps(1)
     }
 
     pub fn advance_fixed_steps(
         &mut self,
         steps: u64,
     ) -> Result<CityTimePosition, CityTimeError> {
-        self.world.advance_fixed_steps(steps)
+        self.world.advance_fixed_steps(self.time, steps)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        CityScenario, ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
-    };
+    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
 
     use super::*;
 
@@ -189,7 +182,7 @@ mod tests {
         let batch_position = batch.advance_fixed_steps(100).unwrap();
         let mut repeated_position = repeated.time_position().unwrap();
         for _ in 0..100 {
-            repeated_position = repeated.world.advance_tick().unwrap();
+            repeated_position = repeated.advance_tick().unwrap();
         }
 
         assert_eq!(batch, repeated);
@@ -221,26 +214,22 @@ mod tests {
 
         let invalid: CityTimeConfig =
             serde_json::from_str(r#"{"minutesPerTick":7}"#).unwrap();
-        let mut invalid_world = CityWorld {
-            time: invalid,
-            ..CityWorld::default()
-        };
-        let before_invalid = invalid_world.clone();
+        let mut invalid_save = CitySave::new(scenario());
+        invalid_save.time = invalid;
+        let before_invalid = invalid_save.clone();
         assert_eq!(
-            invalid_world.advance_fixed_steps(1),
+            invalid_save.advance_fixed_steps(1),
             Err(CityTimeError::InvalidMinutesPerTick(7))
         );
-        assert_eq!(invalid_world, before_invalid);
+        assert_eq!(invalid_save, before_invalid);
 
-        let mut overflow_world = CityWorld {
-            tick: u64::MAX - 1,
-            ..CityWorld::default()
-        };
-        let before_overflow = overflow_world.clone();
+        let mut overflow_save = CitySave::new(scenario());
+        overflow_save.world.tick = u64::MAX - 1;
+        let before_overflow = overflow_save.clone();
         assert_eq!(
-            overflow_world.advance_fixed_steps(2),
+            overflow_save.advance_fixed_steps(2),
             Err(CityTimeError::TickOverflow)
         );
-        assert_eq!(overflow_world, before_overflow);
+        assert_eq!(overflow_save, before_overflow);
     }
 }
