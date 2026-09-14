@@ -214,11 +214,11 @@ pub struct CityWorld {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitySave {
-    pub schema_version: u32,
-    pub scenario: CityScenario,
-    pub time: CityTimeConfig,
-    pub ruleset: CityRuleset,
-    pub world: CityWorld,
+    pub(crate) schema_version: u32,
+    pub(crate) scenario: CityScenario,
+    pub(crate) time: CityTimeConfig,
+    pub(crate) ruleset: CityRuleset,
+    pub(crate) world: CityWorld,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -289,6 +289,7 @@ impl<'de> Deserialize<'de> for CitySave {
             )));
         }
         wire.scenario.validate_schema().map_err(D::Error::custom)?;
+        wire.time.validate().map_err(D::Error::custom)?;
         wire.ruleset.validate().map_err(D::Error::custom)?;
         wire.world
             .planning
@@ -307,14 +308,27 @@ impl<'de> Deserialize<'de> for CitySave {
 
 impl CitySave {
     pub fn new(scenario: CityScenario) -> Result<Self, CitySaveError> {
-        Self::new_with_ruleset(scenario, CityRuleset::default())
+        Self::new_with_config(
+            scenario,
+            CityTimeConfig::default(),
+            CityRuleset::default(),
+        )
     }
 
     pub fn new_with_ruleset(
         scenario: CityScenario,
         ruleset: CityRuleset,
     ) -> Result<Self, CitySaveError> {
+        Self::new_with_config(scenario, CityTimeConfig::default(), ruleset)
+    }
+
+    pub fn new_with_config(
+        scenario: CityScenario,
+        time: CityTimeConfig,
+        ruleset: CityRuleset,
+    ) -> Result<Self, CitySaveError> {
         scenario.validate_schema()?;
+        time.validate()?;
         ruleset.validate()?;
 
         let population = if ruleset.is_enabled(RuleSystem::Population) {
@@ -326,7 +340,7 @@ impl CitySave {
         Ok(Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
-            time: CityTimeConfig::default(),
+            time,
             ruleset,
             world: CityWorld {
                 population,
@@ -400,5 +414,15 @@ mod tests {
                 CityScenarioError::UnsupportedSchemaVersion(_)
             ))
         ));
+    }
+
+    #[test]
+    fn custom_typed_rules_are_applied_when_a_save_is_created() {
+        let mut ruleset = CityRuleset::default();
+        ruleset.population.config.residential_floor_area_m2_per_household = 72;
+
+        let save = CitySave::new_with_ruleset(scenario(), ruleset.clone()).unwrap();
+
+        assert_eq!(save.ruleset, ruleset);
     }
 }
