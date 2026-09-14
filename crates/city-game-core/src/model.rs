@@ -173,8 +173,6 @@ impl CityScenario {
 #[serde(rename_all = "camelCase")]
 pub struct CityWorld {
     pub tick: u64,
-    #[serde(default)]
-    pub time: CityTimeConfig,
     pub metrics: BTreeMap<String, i64>,
     pub progression: ProgressionState,
     pub planning: CityPlanningOverlay,
@@ -185,6 +183,8 @@ pub struct CityWorld {
 pub struct CitySave {
     pub schema_version: u32,
     pub scenario: CityScenario,
+    #[serde(default)]
+    pub time: CityTimeConfig,
     pub world: CityWorld,
 }
 
@@ -193,6 +193,7 @@ impl CitySave {
         Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
+            time: CityTimeConfig::default(),
             world: CityWorld::default(),
         }
     }
@@ -225,7 +226,7 @@ mod tests {
     #[test]
     fn save_roundtrip_preserves_game_scenario_provenance_and_clock() {
         let mut save = CitySave::new(scenario());
-        save.world.advance_tick().unwrap();
+        save.advance_tick().unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
@@ -233,7 +234,7 @@ mod tests {
         assert_eq!(decoded, save);
         assert_eq!(decoded.scenario.provenance.source_sha256, "abc123");
         assert_eq!(decoded.world.tick, 1);
-        assert_eq!(decoded.world.time, CityTimeConfig::default());
+        assert_eq!(decoded.time, CityTimeConfig::default());
         assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
     }
