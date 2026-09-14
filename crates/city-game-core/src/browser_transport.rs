@@ -139,9 +139,10 @@ mod tests {
 
         let response: Value =
             serde_json::from_str(&render_frame_json(&save_json, 16.0 / 9.0)).unwrap();
+        let aspect = response["frame"]["camera"]["aspect"].as_f64().unwrap();
 
         assert_eq!(response["ok"], true);
-        assert_eq!(response["frame"]["camera"]["aspect"], 16.0 / 9.0);
+        assert!((aspect - f64::from(16.0_f32 / 9.0_f32)).abs() <= f64::EPSILON);
         assert!(response["frame"]["nodes"].as_array().unwrap().is_empty());
     }
 
