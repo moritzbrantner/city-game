@@ -4,7 +4,7 @@ use std::fmt;
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CityScenario, CityWorld, RoadClass};
+use crate::{CitySave, CityScenario, CityWorld, PopulationError, RoadClass};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -279,8 +279,13 @@ impl CitySave {
         self.world.planning.effective_roads(&self.scenario)
     }
 
-    pub fn restart(&mut self) {
-        self.world = CityWorld::default();
+    pub fn restart(&mut self) -> Result<(), PopulationError> {
+        let population = self.scenario_population_baseline()?;
+        self.world = CityWorld {
+            population,
+            ..CityWorld::default()
+        };
+        Ok(())
     }
 }
 
@@ -349,6 +354,7 @@ mod tests {
                 name: None,
                 levels: Some(3),
                 height_m: Some(9.0),
+                gross_floor_area_m2: 900,
             }],
             water: Vec::new(),
             land_use_areas: Vec::new(),
@@ -477,9 +483,14 @@ mod tests {
 
         let scenario = save.scenario.clone();
         let time = save.time;
-        save.restart();
+        let population_rules = save.population_rules;
+        let population = save.scenario_population_baseline().unwrap();
+        save.restart().unwrap();
         assert_eq!(save.scenario, scenario);
         assert_eq!(save.time, time);
-        assert_eq!(save.world, CityWorld::default());
+        assert_eq!(save.population_rules, population_rules);
+        assert_eq!(save.world.population, population);
+        assert_eq!(save.world.planning, CityPlanningOverlay::default());
+        assert_eq!(save.world.tick, 0);
     }
 }
