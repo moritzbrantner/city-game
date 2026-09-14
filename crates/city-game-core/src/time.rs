@@ -117,6 +117,11 @@ impl CitySave {
         self.time.position(self.world.tick)
     }
 
+    #[cfg(test)]
+    pub(crate) fn advance_tick(&mut self) -> Result<CityTimePosition, CitySaveError> {
+        self.advance_fixed_steps(1)
+    }
+
     pub(crate) fn advance_fixed_steps(
         &mut self,
         steps: u64,
