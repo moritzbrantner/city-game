@@ -3,9 +3,7 @@ use serde::{Deserialize, Serialize};
 use three_d_camera::{CameraError, OrthographicCamera};
 use three_d_core::Vec3;
 
-use crate::{
-    CitySave, CityScenario, RoadClass, ScenarioBuilding, ScenarioRoad, ZoneKind,
-};
+use crate::{CitySave, CityScenario, RoadClass, ScenarioBuilding, ZoneKind};
 
 pub const THREE_D_LAB_REVISION: &str = "6a18cb2d1fe9efdbae619c144b2180fdeb472172";
 
@@ -170,10 +168,7 @@ pub fn build_render_frame(
     finish_frame(nodes, fit_points, aspect)
 }
 
-pub fn build_save_render_frame(
-    save: &CitySave,
-    aspect: f32,
-) -> Result<RendererFrame, CameraError> {
+pub fn build_save_render_frame(save: &CitySave, aspect: f32) -> Result<RendererFrame, CameraError> {
     let projection = GameWorldProjection::from_save(save);
     let mut nodes = Vec::new();
     let mut fit_points = Vec::new();
