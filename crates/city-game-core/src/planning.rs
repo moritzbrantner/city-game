@@ -354,18 +354,18 @@ impl CityPlanningOverlay {
 }
 
 impl CitySave {
-    pub fn apply_planning(
+    pub(crate) fn apply_planning(
         &mut self,
         command: PlanningCommand,
     ) -> Result<PlanningOutcome, PlanningError> {
         self.world.planning.apply(&self.scenario, command)
     }
 
-    pub fn effective_roads(&self) -> Vec<EffectiveRoad> {
+    pub(crate) fn effective_roads(&self) -> Vec<EffectiveRoad> {
         self.world.planning.effective_roads(&self.scenario)
     }
 
-    pub fn restart(&mut self) -> Result<(), PopulationError> {
+    pub(crate) fn restart(&mut self) -> Result<(), PopulationError> {
         let population = self.scenario_population_baseline()?;
         self.world = CityWorld {
             population,
@@ -624,12 +624,12 @@ mod tests {
 
         let scenario = save.scenario.clone();
         let time = save.time;
-        let population_rules = save.population_rules;
+        let ruleset = save.ruleset.clone();
         let population = save.scenario_population_baseline().unwrap();
         save.restart().unwrap();
         assert_eq!(save.scenario, scenario);
         assert_eq!(save.time, time);
-        assert_eq!(save.population_rules, population_rules);
+        assert_eq!(save.ruleset, ruleset);
         assert_eq!(save.world.population, population);
         assert_eq!(save.world.planning, CityPlanningOverlay::default());
         assert_eq!(save.world.tick, 0);
