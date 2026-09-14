@@ -160,7 +160,8 @@ impl PopulationState {
 
 impl CitySave {
     pub(crate) fn validate_population_configuration(&self) -> Result<(), PopulationError> {
-        PopulationCapacity::from_scenario(&self.scenario, self.ruleset.population.config).map(|_| ())
+        PopulationCapacity::from_scenario(&self.scenario, self.ruleset.population.config)
+            .map(|_| ())
     }
 
     pub(crate) fn developed_population_capacity(
@@ -323,11 +324,9 @@ mod tests {
 
     #[test]
     fn redevelopment_reduces_capacity_without_deleting_occupants() {
-        let population = PopulationState::baseline_from_scenario(
-            &scenario(),
-            PopulationRules::default(),
-        )
-        .unwrap();
+        let population =
+            PopulationState::baseline_from_scenario(&scenario(), PopulationRules::default())
+                .unwrap();
         let mut save = CitySave {
             schema_version: crate::SAVE_SCHEMA_VERSION,
             scenario: scenario(),
@@ -366,7 +365,10 @@ mod tests {
     #[test]
     fn invalid_ruleset_configuration_fails_before_authoritative_step_mutates_world() {
         let mut save = CitySave::new(scenario()).unwrap();
-        save.ruleset.population.config.residential_floor_area_m2_per_household = 0;
+        save.ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 0;
         let before = save.clone();
 
         assert!(save.ruleset.validate().is_err());
