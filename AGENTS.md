@@ -44,6 +44,15 @@
 
 Progression is rule/data driven. UI code may explain unlocks but must not decide them. Avoid arbitrary feature withholding: later systems should represent new city responsibilities and interact with systems already unlocked.
 
+## Browser delivery
+
+- A GitHub Pages version is a required `city-game` delivery surface, not an optional documentation demo.
+- `web/` is the canonical browser application. Do not create a parallel Pages-only implementation or duplicate simulation rules in browser code.
+- Build the Pages artifact through `scripts/build-pages.sh`; it must regenerate game-owned renderer data through the canonical Rust CLI and use frozen browser dependencies.
+- Keep project-site assets relative so the same artifact works at `/city-game/` without repository-name logic in simulation or rendering code.
+- Deployment must consume an exact-source, verified build artifact. Do not silently rebuild a different artifact in the deploy job.
+- If Pages is not configured, validation/deployment must report that state explicitly rather than treating missing publication as success.
+
 ## Validation
 
-Do not treat absent CI as green. Repository-owned validation should cover the parser-consumer boundary, absence of raw OSM tag dependence after import, canonical physical measurements, deterministic planning/progression/time/population demand, save provenance, restart semantics, renderer-frame serialization, and the browser build. Once lockfiles are established, validation should run with frozen/locked dependency state.
+Do not treat absent CI as green. Repository-owned validation should cover the parser-consumer boundary, absence of raw OSM tag dependence after import, canonical physical measurements, deterministic planning/progression/time/population demand, save provenance, restart semantics, renderer-frame serialization, the canonical browser build, and the required Pages delivery contract. Once lockfiles are established, validation should run with frozen/locked dependency state.

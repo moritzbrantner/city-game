@@ -1,0 +1,104 @@
+name: Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pages-preflight:
+    name: Pages preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    outputs:
+      enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - name: Check repository Pages configuration
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status="$({
+            curl --silent --show-error \
+              --output /tmp/pages.json \
+              --write-out '%{http_code}' \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/pages"
+          })"
+
+          case "$status" in
+            200)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              {
+                echo "## GitHub Pages is not enabled yet"
+                echo
+                echo "Enable **Settings → Pages → Build and deployment → Source: GitHub Actions** once for this repository."
+                echo "After that, rerun this workflow or push to main."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              cat /tmp/pages.json >&2 || true
+              echo "Unexpected GitHub Pages API status: $status" >&2
+              exit 1
+              ;;
+          esac
+
+  build-pages:
+    name: Build or reuse Pages artifact
+    needs: pages-preflight
+    if: ${{ needs.pages-preflight.outputs.enabled == 'true' }}
+    permissions:
+      actions: read
+      contents: read
+    uses: moritzbrantner/reusable-workflows/.github/workflows/build-artifact.yml@28a77d034ce18595e5f058f81e8063ea67d23bd9
+    with:
+      source_sha: ${{ github.sha }}
+      artifact_key: city-game-pages-v1
+      rust_toolchain: "1.98.0"
+      bun_version: "1.3.14"
+      cache_bun: true
+      bun_cache_dependency_path: web/bun.lock
+      build_command: bash scripts/build-pages.sh
+      artifact_paths: web/dist
+      reuse_across_runs: true
+      artifact_retention_days: 7
+
+  deploy-pages:
+    name: Deploy Pages
+    needs: build-pages
+    permissions:
+      actions: read
+      contents: read
+      pages: write
+      id-token: write
+      packages: read
+    uses: moritzbrantner/reusable-workflows/.github/workflows/deploy-pages.yml@28a77d034ce18595e5f058f81e8063ea67d23bd9
+    with:
+      node_version: ""
+      bun_version: ""
+      install_command: ""
+      build_command: ""
+      artifact_path: web/dist
+      prebuilt_artifact_run_id: ${{ needs.build-pages.outputs.producer_run_id }}
+      prebuilt_artifact_receipt_name: ${{ needs.build-pages.outputs.receipt_artifact_name }}
+      prebuilt_artifact_name: ${{ needs.build-pages.outputs.artifact_name }}
+      prebuilt_artifact_digest: ${{ needs.build-pages.outputs.artifact_digest }}
+      prebuilt_source_sha: ${{ needs.build-pages.outputs.source_sha }}
+      prebuilt_artifact_key: ${{ needs.build-pages.outputs.artifact_key }}
+      prebuilt_identity_digest: ${{ needs.build-pages.outputs.identity_digest }}
+      cache_bun: false
+      cache_node: false
+      concurrency_group: city-game-pages
+      cancel_in_progress: false
