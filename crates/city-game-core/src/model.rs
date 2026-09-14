@@ -252,6 +252,7 @@ impl<'de> Deserialize<'de> for CitySave {
             population_rules: wire.population_rules,
             world: wire.world,
         })
+    }
 }
 
 impl CitySave {
