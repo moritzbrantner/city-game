@@ -39,9 +39,9 @@ impl Serialize for CityCommandOutcome {
         S: Serializer,
     {
         let wire = match self {
-            Self::Planning(PlanningOutcome::Applied) => CityCommandOutcomeWire::Planning {
-                outcome: "applied",
-            },
+            Self::Planning(PlanningOutcome::Applied) => {
+                CityCommandOutcomeWire::Planning { outcome: "applied" }
+            }
             Self::Planning(PlanningOutcome::Unchanged) => CityCommandOutcomeWire::Planning {
                 outcome: "unchanged",
             },
@@ -186,10 +186,8 @@ mod tests {
 
     #[test]
     fn command_outcomes_have_transport_safe_shape() {
-        let planning = serde_json::to_value(CityCommandOutcome::Planning(
-            PlanningOutcome::Applied,
-        ))
-        .unwrap();
+        let planning =
+            serde_json::to_value(CityCommandOutcome::Planning(PlanningOutcome::Applied)).unwrap();
         let advanced = serde_json::to_value(CityCommandOutcome::Advanced(CityTimePosition {
             tick: 4,
             day: 1,
