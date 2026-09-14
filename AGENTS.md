@@ -9,6 +9,14 @@
 5. Keep scenario normalization, simulation, aggregate population/jobs, progression rules, planning overlays, city time, save state, economy, services, zoning, and city-specific rendering policy in `city-game-core`.
 6. Before adding local ECS, physics, asset-pipeline, multiplayer/session, pathfinding, or generic spatial infrastructure, inspect the corresponding shared repositories and integrate through an adapter when mature enough.
 
+## Application and simulation boundary
+
+- Use lightweight CQS/CQRS for application and player intent, not as the internal architecture of the simulation engine.
+- `CityCommand` may represent semantic player/application mutations such as planning changes or restarting a scenario. Do not route fixed-step advancement, progression evaluation, economy ticks, service updates, AI, pathfinding, ECS systems, physics, or other simulation mechanics through the command gateway.
+- Simulation systems are direct deterministic `city-game-core` operations coordinated by authoritative fixed-step simulation. Their behavior must remain equivalent for batched versus repeated single steps where applicable.
+- Queries may provide read-oriented shapes over authoritative state, but do not add asynchronous projections, a separate read store, messaging, or event sourcing without a concrete requirement that justifies their consistency and operational cost.
+- Keep command handlers thin: validate application intent and delegate domain rules to their authoritative core systems rather than duplicating business logic in transport/UI layers.
+
 ## Scenario and persistence boundary
 
 - `OSM bytes -> geo-analysis parser model -> canonical CityScenario -> mutable CityWorld/planning -> CitySave`.
