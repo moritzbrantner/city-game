@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
-    "build": "rm -rf dist && bun build src/main.js --outdir dist --target browser && cp index.html src/style.css public/demo-frame.json dist/"
+    "build": "rm -rf dist && bun build src/main.js --outdir dist --target browser && mkdir -p dist/scenarios && cp index.html src/style.css public/scenarios.json dist/ && cp public/scenarios/*.json dist/scenarios/"
   },
   "dependencies": {
     "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#6a18cb2d1fe9efdbae619c144b2180fdeb472172"

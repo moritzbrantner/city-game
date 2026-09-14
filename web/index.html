@@ -3,27 +3,31 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>city-game foundation</title>
+    <title>city-game scenarios</title>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <section class="scene" aria-label="Imported city scenario">
+      <section class="scene" aria-label="Selected city scenario">
         <canvas id="scene"></canvas>
       </section>
       <aside>
-        <p class="eyebrow">Foundation proof</p>
-        <h1>Real geography, game-owned world</h1>
+        <p class="eyebrow">Example scenarios</p>
+        <h1>Choose a city to develop</h1>
         <p>
-          This browser surface consumes a renderer frame emitted by <code>city-game-core</code> and draws it through
-          <code>@moritzbrantner/three-d-renderer</code>. OSM parsing and generic camera/renderer mechanics remain outside
-          the game repository.
+          These examples are canonical <code>CityScenario</code> fixtures rendered through the same Rust-to-3D path as
+          imported cities. They are intentionally marked as curated demos; real OSM import remains owned by
+          <code>geo-analysis</code> and the city-game normalization boundary.
         </p>
+        <nav id="scenario-list" class="scenario-list" aria-label="Example city scenarios"></nav>
+        <p id="scenario-description" class="scenario-description"></p>
         <dl>
           <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
+          <div><dt>Region</dt><dd id="region">—</dd></div>
           <div><dt>Objects</dt><dd id="objects">—</dd></div>
-          <div><dt>Renderer revision</dt><dd>6a18cb2</dd></div>
+          <div><dt>Data</dt><dd id="data-kind">—</dd></div>
         </dl>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
       </aside>
     </main>
     <script type="module" src="./main.js"></script>
