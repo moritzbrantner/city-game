@@ -294,13 +294,7 @@ fn append_road_nodes(
                     rotation_quaternion: Some([0.0, half.sin(), 0.0, half.cos()]),
                 },
             });
-            append_road_fit_points(
-                fit_points,
-                [start_x, start_z],
-                [end_x, end_z],
-                width,
-                0.25,
-            );
+            append_road_fit_points(fit_points, [start_x, start_z], [end_x, end_z], width, 0.25);
             segment_index += 1;
         }
     });
