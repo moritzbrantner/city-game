@@ -117,10 +117,6 @@ impl CitySave {
         self.time.position(self.world.tick)
     }
 
-    pub(crate) fn advance_tick(&mut self) -> Result<CityTimePosition, CitySaveError> {
-        self.advance_fixed_steps(1)
-    }
-
     pub(crate) fn advance_fixed_steps(
         &mut self,
         steps: u64,
@@ -174,7 +170,7 @@ mod tests {
         let batch_position = batch.advance_fixed_steps(100).unwrap();
         let mut repeated_position = repeated.time_position().unwrap();
         for _ in 0..100 {
-            repeated_position = repeated.advance_tick().unwrap();
+            repeated_position = repeated.advance_fixed_steps(1).unwrap();
         }
 
         assert_eq!(batch, repeated);
