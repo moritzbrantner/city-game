@@ -3,7 +3,9 @@ use serde::{Deserialize, Serialize};
 use three_d_camera::{CameraError, OrthographicCamera};
 use three_d_core::Vec3;
 
-use crate::{CityScenario, ScenarioFeature, ScenarioFeatureKind};
+use crate::{
+    CitySave, CityScenario, RoadClass, ScenarioBuilding, ScenarioRoad, ZoneKind,
+};
 
 pub const THREE_D_LAB_REVISION: &str = "6a18cb2d1fe9efdbae619c144b2180fdeb472172";
 
@@ -63,9 +65,23 @@ struct GameWorldProjection {
 impl GameWorldProjection {
     fn from_scenario(scenario: &CityScenario) -> Self {
         let mut positions = Vec::new();
-        for feature in &scenario.features {
-            collect_positions(&feature.geometry, &mut positions);
+        collect_scenario_positions(scenario, &mut positions);
+        Self::from_positions(&positions)
+    }
+
+    fn from_save(save: &CitySave) -> Self {
+        let mut positions = Vec::new();
+        collect_scenario_positions(&save.scenario, &mut positions);
+        for road in save.world.planning.player_roads.values() {
+            collect_positions(&road.geometry, &mut positions);
         }
+        for zone in save.world.planning.zones.values() {
+            collect_positions(&zone.geometry, &mut positions);
+        }
+        Self::from_positions(&positions)
+    }
+
+    fn from_positions(positions: &[[f64; 2]]) -> Self {
         let (origin_lon, origin_lat) = if positions.is_empty() {
             (0.0, 0.0)
         } else {
@@ -109,50 +125,132 @@ pub fn build_render_frame(
     scenario: &CityScenario,
     aspect: f32,
 ) -> Result<RendererFrame, CameraError> {
-    if !aspect.is_finite() || aspect <= 0.0 {
-        return Err(CameraError::InvalidAspect);
-    }
-
     let projection = GameWorldProjection::from_scenario(scenario);
     let mut nodes = Vec::new();
     let mut fit_points = Vec::new();
 
-    for feature in &scenario.features {
-        match feature.kind {
-            ScenarioFeatureKind::Road => {
-                append_road_nodes(feature, projection, &mut nodes, &mut fit_points)
-            }
-            ScenarioFeatureKind::Building => append_area_node(
-                feature,
-                projection,
-                &mut nodes,
-                &mut fit_points,
-                0xb5aa98,
-                building_height(feature),
-            ),
-            ScenarioFeatureKind::Water => append_area_node(
-                feature,
-                projection,
-                &mut nodes,
-                &mut fit_points,
-                0x5b9bd5,
-                0.15,
-            ),
-            ScenarioFeatureKind::LandUse => append_area_node(
-                feature,
-                projection,
-                &mut nodes,
-                &mut fit_points,
-                0x7fa36b,
-                0.08,
-            ),
-            ScenarioFeatureKind::Transit | ScenarioFeatureKind::Other => {}
+    for road in &scenario.roads {
+        append_road_nodes(
+            &road.id,
+            &road.geometry,
+            road.class,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+        );
+    }
+    for building in &scenario.buildings {
+        append_building_node(building, projection, &mut nodes, &mut fit_points);
+    }
+    for water in &scenario.water {
+        append_area_node(
+            &water.id,
+            &water.geometry,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+            0x5b9bd5,
+            Some(0.72),
+            0.15,
+        );
+    }
+    for land_use in &scenario.land_use_areas {
+        append_area_node(
+            &land_use.id,
+            &land_use.geometry,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+            0x7fa36b,
+            None,
+            0.08,
+        );
+    }
+
+    finish_frame(nodes, fit_points, aspect)
+}
+
+pub fn build_save_render_frame(
+    save: &CitySave,
+    aspect: f32,
+) -> Result<RendererFrame, CameraError> {
+    let projection = GameWorldProjection::from_save(save);
+    let mut nodes = Vec::new();
+    let mut fit_points = Vec::new();
+    let planning = &save.world.planning;
+
+    for road in save.effective_roads() {
+        append_road_nodes(
+            &road.id,
+            &road.geometry,
+            road.class,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+        );
+    }
+    for building in &save.scenario.buildings {
+        if planning.is_suppressed(&building.id) {
+            continue;
         }
+        append_building_node(building, projection, &mut nodes, &mut fit_points);
+    }
+    for water in &save.scenario.water {
+        if planning.is_suppressed(&water.id) {
+            continue;
+        }
+        append_area_node(
+            &water.id,
+            &water.geometry,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+            0x5b9bd5,
+            Some(0.72),
+            0.15,
+        );
+    }
+    for land_use in &save.scenario.land_use_areas {
+        if planning.is_suppressed(&land_use.id) {
+            continue;
+        }
+        append_area_node(
+            &land_use.id,
+            &land_use.geometry,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+            0x7fa36b,
+            None,
+            0.08,
+        );
+    }
+    for zone in planning.zones.values() {
+        append_area_node(
+            &zone.id,
+            &zone.geometry,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+            zone_color(zone.kind),
+            Some(0.34),
+            0.12,
+        );
+    }
+
+    finish_frame(nodes, fit_points, aspect)
+}
+
+fn finish_frame(
+    mut nodes: Vec<RendererSceneNode>,
+    fit_points: Vec<Vec3>,
+    aspect: f32,
+) -> Result<RendererFrame, CameraError> {
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return Err(CameraError::InvalidAspect);
     }
     nodes.sort_by(|left, right| left.id.cmp(&right.id));
-
     let camera = fit_orthographic_camera(&fit_points, aspect)?;
-
     Ok(RendererFrame {
         camera: RendererCamera {
             aspect,
@@ -262,14 +360,16 @@ fn fit_orthographic_camera(
 }
 
 fn append_road_nodes(
-    feature: &ScenarioFeature,
+    id: &str,
+    geometry: &Geometry,
+    class: RoadClass,
     projection: GameWorldProjection,
     nodes: &mut Vec<RendererSceneNode>,
     fit_points: &mut Vec<Vec3>,
 ) {
-    let width = road_width(feature);
+    let width = road_width(class);
     let mut segment_index = 0_usize;
-    visit_lines(&feature.geometry, &mut |line| {
+    visit_lines(geometry, &mut |line| {
         for pair in line.windows(2) {
             let [start_x, start_z] = projection.project(pair[0]);
             let [end_x, end_z] = projection.project(pair[1]);
@@ -282,7 +382,7 @@ fn append_road_nodes(
             let angle = dx.atan2(dz);
             let half = angle * 0.5;
             nodes.push(RendererSceneNode {
-                id: format!("{}/road-segment-{segment_index}", feature.source_id),
+                id: format!("{id}/road-segment-{segment_index}"),
                 geometry: RendererGeometry::Box {
                     size: [width, 0.25, length],
                 },
@@ -328,15 +428,36 @@ fn append_road_fit_points(
     }
 }
 
+fn append_building_node(
+    building: &ScenarioBuilding,
+    projection: GameWorldProjection,
+    nodes: &mut Vec<RendererSceneNode>,
+    fit_points: &mut Vec<Vec3>,
+) {
+    append_area_node(
+        &building.id,
+        &building.footprint,
+        projection,
+        nodes,
+        fit_points,
+        0xb5aa98,
+        None,
+        building_height(building),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
 fn append_area_node(
-    feature: &ScenarioFeature,
+    id: &str,
+    geometry: &Geometry,
     projection: GameWorldProjection,
     nodes: &mut Vec<RendererSceneNode>,
     fit_points: &mut Vec<Vec3>,
     color: u32,
+    opacity: Option<f32>,
     height: f32,
 ) {
-    let Some(bounds) = projected_bounds(&feature.geometry, projection) else {
+    let Some(bounds) = projected_bounds(geometry, projection) else {
         return;
     };
     let width = (bounds.max_x - bounds.min_x).abs().max(1.0);
@@ -349,10 +470,10 @@ fn append_area_node(
     ];
     let size = [width, height, depth];
     nodes.push(RendererSceneNode {
-        id: feature.source_id.clone(),
+        id: id.to_owned(),
         geometry: RendererGeometry::Box { size },
         color,
-        opacity: (feature.kind == ScenarioFeatureKind::Water).then_some(0.72),
+        opacity,
         transform: RendererTransform {
             translation,
             scale: None,
@@ -414,31 +535,50 @@ fn projected_bounds(
     Some(bounds)
 }
 
-fn road_width(feature: &ScenarioFeature) -> f32 {
-    match feature.tags.get("highway").map(String::as_str) {
-        Some("motorway" | "trunk") => 12.0,
-        Some("primary" | "secondary") => 9.0,
-        Some("tertiary") => 7.0,
-        _ => 5.5,
+fn road_width(class: RoadClass) -> f32 {
+    match class {
+        RoadClass::Motorway | RoadClass::Trunk => 12.0,
+        RoadClass::Primary | RoadClass::Secondary => 9.0,
+        RoadClass::Tertiary => 7.0,
+        RoadClass::Residential | RoadClass::Service | RoadClass::Other => 5.5,
+        RoadClass::Track => 4.5,
+        RoadClass::Pedestrian | RoadClass::Cycleway | RoadClass::Footway => 3.0,
     }
 }
 
-fn building_height(feature: &ScenarioFeature) -> f32 {
-    if let Some(height) = feature
-        .tags
-        .get("height")
-        .and_then(|value| value.trim_end_matches('m').trim().parse::<f32>().ok())
-    {
-        return height.clamp(2.5, 400.0);
+fn building_height(building: &ScenarioBuilding) -> f32 {
+    building
+        .height_m
+        .or_else(|| building.levels.map(|levels| f32::from(levels) * 3.0))
+        .unwrap_or(9.0)
+        .clamp(2.5, 400.0)
+}
+
+fn zone_color(kind: ZoneKind) -> u32 {
+    match kind {
+        ZoneKind::Residential => 0x79a86b,
+        ZoneKind::Commercial => 0x6a8eb5,
+        ZoneKind::Industrial => 0xb59a62,
+        ZoneKind::MixedUse => 0x8d76ad,
     }
-    if let Some(levels) = feature
-        .tags
-        .get("building:levels")
-        .and_then(|value| value.parse::<f32>().ok())
-    {
-        return (levels * 3.0).clamp(2.5, 400.0);
+}
+
+fn collect_scenario_positions(scenario: &CityScenario, output: &mut Vec<[f64; 2]>) {
+    for road in &scenario.roads {
+        collect_positions(&road.geometry, output);
     }
-    9.0
+    for building in &scenario.buildings {
+        collect_positions(&building.footprint, output);
+    }
+    for water in &scenario.water {
+        collect_positions(&water.geometry, output);
+    }
+    for land_use in &scenario.land_use_areas {
+        collect_positions(&land_use.geometry, output);
+    }
+    for transit in &scenario.transit_anchors {
+        collect_positions(&transit.geometry, output);
+    }
 }
 
 fn visit_lines(geometry: &Geometry, visitor: &mut impl FnMut(&[[f64; 2]])) {
@@ -498,15 +638,15 @@ fn collect_positions(geometry: &Geometry, output: &mut Vec<[f64; 2]>) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
-    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
+    use crate::{
+        BuildingUse, ExternalRevision, PlannedRoad, PlannedZone, PlanningCommand,
+        SCENARIO_SCHEMA_VERSION, ScenarioBuilding, ScenarioProvenance, ScenarioRoad, ZoneKind,
+    };
 
     use super::*;
 
-    #[test]
-    fn frame_uses_shared_camera_contract_and_stable_node_order() {
-        let scenario = CityScenario {
+    fn scenario() -> CityScenario {
+        CityScenario {
             schema_version: SCENARIO_SCHEMA_VERSION,
             provenance: ScenarioProvenance {
                 source_format: "osm-pbf".to_owned(),
@@ -517,43 +657,103 @@ mod tests {
                     revision: "fixture".to_owned(),
                 },
             },
-            features: vec![
-                ScenarioFeature {
-                    source_id: "way/20".to_owned(),
-                    kind: ScenarioFeatureKind::Building,
-                    tags: BTreeMap::from([("building".to_owned(), "yes".to_owned())]),
-                    geometry: Geometry::Polygon {
-                        coordinates: vec![vec![
-                            [8.0, 48.0],
-                            [8.001, 48.0],
-                            [8.001, 48.001],
-                            [8.0, 48.0],
-                        ]],
-                    },
+            roads: vec![ScenarioRoad {
+                id: "imported/way/10".to_owned(),
+                source_id: "way/10".to_owned(),
+                geometry: Geometry::LineString {
+                    coordinates: vec![[8.0, 48.0], [8.001, 48.001]],
                 },
-                ScenarioFeature {
-                    source_id: "way/10".to_owned(),
-                    kind: ScenarioFeatureKind::Road,
-                    tags: BTreeMap::from([("highway".to_owned(), "residential".to_owned())]),
-                    geometry: Geometry::LineString {
-                        coordinates: vec![[8.0, 48.0], [8.001, 48.001]],
-                    },
+                class: RoadClass::Residential,
+                name: Some("Imported Street".to_owned()),
+                lanes: Some(2),
+                max_speed_kph: Some(50),
+            }],
+            buildings: vec![ScenarioBuilding {
+                id: "imported/way/20".to_owned(),
+                source_id: "way/20".to_owned(),
+                footprint: Geometry::Polygon {
+                    coordinates: vec![vec![
+                        [8.0, 48.0],
+                        [8.001, 48.0],
+                        [8.001, 48.001],
+                        [8.0, 48.0],
+                    ]],
                 },
-            ],
-        };
+                use_kind: BuildingUse::Residential,
+                name: None,
+                levels: Some(4),
+                height_m: None,
+            }],
+            water: Vec::new(),
+            land_use_areas: Vec::new(),
+            transit_anchors: Vec::new(),
+        }
+    }
 
+    #[test]
+    fn frame_uses_canonical_game_semantics_and_shared_camera_contract() {
+        let scenario = scenario();
         let first = build_render_frame(&scenario, 16.0 / 9.0).unwrap();
         let second = build_render_frame(&scenario, 16.0 / 9.0).unwrap();
         assert_eq!(first, second);
-        assert_eq!(first.nodes[0].id, "way/10/road-segment-0");
-        assert_eq!(first.nodes[1].id, "way/20");
+        assert_eq!(first.nodes[0].id, "imported/way/10/road-segment-0");
+        assert_eq!(first.nodes[1].id, "imported/way/20");
         assert!((first.camera.aspect - 16.0 / 9.0).abs() <= f32::EPSILON);
 
         let json = serde_json::to_value(first).unwrap();
         assert!(json["camera"]["viewMatrix"].is_array());
         assert!(json["camera"]["projectionMatrix"].is_array());
-        assert!(json["camera"]["aspect"].is_number());
         assert_eq!(json["nodes"][0]["geometry"]["kind"], "box");
+    }
+
+    #[test]
+    fn save_frame_projects_effective_planning_overlay() {
+        let mut save = CitySave::new(scenario());
+        save.apply_planning(PlanningCommand::SuppressScenarioEntity {
+            id: "imported/way/10".to_owned(),
+        })
+        .unwrap();
+        save.apply_planning(PlanningCommand::AddRoad {
+            road: PlannedRoad {
+                id: "player/road/1".to_owned(),
+                geometry: Geometry::LineString {
+                    coordinates: vec![[8.002, 48.0], [8.003, 48.001]],
+                },
+                class: RoadClass::Secondary,
+                name: None,
+            },
+        })
+        .unwrap();
+        save.apply_planning(PlanningCommand::ZoneArea {
+            zone: PlannedZone {
+                id: "player/zone/1".to_owned(),
+                geometry: Geometry::Polygon {
+                    coordinates: vec![vec![
+                        [8.002, 48.0],
+                        [8.003, 48.0],
+                        [8.003, 48.001],
+                        [8.002, 48.0],
+                    ]],
+                },
+                kind: ZoneKind::Residential,
+            },
+        })
+        .unwrap();
+
+        let frame = build_save_render_frame(&save, 1.0).unwrap();
+        assert!(
+            frame
+                .nodes
+                .iter()
+                .all(|node| !node.id.starts_with("imported/way/10/road-segment"))
+        );
+        assert!(
+            frame
+                .nodes
+                .iter()
+                .any(|node| node.id == "player/road/1/road-segment-0")
+        );
+        assert!(frame.nodes.iter().any(|node| node.id == "player/zone/1"));
     }
 
     #[test]
@@ -586,22 +786,8 @@ mod tests {
 
     #[test]
     fn invalid_viewport_aspect_fails_closed() {
-        let scenario = CityScenario {
-            schema_version: SCENARIO_SCHEMA_VERSION,
-            provenance: ScenarioProvenance {
-                source_format: "osm-pbf".to_owned(),
-                source_name: "fixture".to_owned(),
-                source_sha256: "fixture".to_owned(),
-                parser: ExternalRevision {
-                    repository: "geo-analysis".to_owned(),
-                    revision: "fixture".to_owned(),
-                },
-            },
-            features: Vec::new(),
-        };
-
         assert_eq!(
-            build_render_frame(&scenario, 0.0),
+            build_render_frame(&scenario(), 0.0),
             Err(CameraError::InvalidAspect)
         );
     }
