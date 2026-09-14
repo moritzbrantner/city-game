@@ -63,8 +63,8 @@ fn encode_result(result: Result<Value, String>) -> String {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CityCommand, CityQuery, CitySave, CityScenario, ExternalRevision, SCENARIO_SCHEMA_VERSION,
-        ScenarioProvenance,
+        CityCommand, CityQuery, CitySave, CityScenario, ExternalRevision, SAVE_SCHEMA_VERSION,
+        SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
     };
 
     use super::*;
@@ -87,6 +87,17 @@ mod tests {
             land_use_areas: Vec::new(),
             transit_anchors: Vec::new(),
         }
+    }
+
+    #[test]
+    fn browser_transport_creates_current_save_from_canonical_scenario() {
+        let scenario_json = serde_json::to_string(&scenario()).unwrap();
+
+        let response: Value = serde_json::from_str(&new_save_json(&scenario_json)).unwrap();
+
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["save"]["schemaVersion"], SAVE_SCHEMA_VERSION);
+        assert_eq!(response["save"]["scenario"]["schemaVersion"], SCENARIO_SCHEMA_VERSION);
     }
 
     #[test]
@@ -116,6 +127,19 @@ mod tests {
         assert_eq!(response["ok"], true);
         assert_eq!(response["result"]["kind"], "timePosition");
         assert_eq!(response["result"]["position"]["tick"], 0);
+    }
+
+    #[test]
+    fn browser_transport_renders_from_authoritative_save_state() {
+        let save = CitySave::new(scenario()).unwrap();
+        let save_json = serde_json::to_string(&save).unwrap();
+
+        let response: Value =
+            serde_json::from_str(&render_frame_json(&save_json, 16.0 / 9.0)).unwrap();
+
+        assert_eq!(response["ok"], true);
+        assert_eq!(response["frame"]["camera"]["aspect"], 16.0 / 9.0);
+        assert!(response["frame"]["nodes"].as_array().unwrap().is_empty());
     }
 
     #[test]
