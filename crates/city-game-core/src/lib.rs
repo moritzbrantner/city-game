@@ -5,8 +5,10 @@
 //! Application writes enter through [`CitySave::execute`]; reads use [`CitySave::query`] or
 //! [`CitySave::queries`].
 
+mod browser_transport;
 mod commands;
 mod model;
+#[cfg(not(target_arch = "wasm32"))]
 mod osm;
 mod planning;
 mod population;
@@ -15,6 +17,8 @@ mod queries;
 mod render;
 mod rules;
 mod time;
+#[cfg(target_arch = "wasm32")]
+mod wasm_abi;
 
 pub use commands::{CityCommand, CityCommandError, CityCommandOutcome};
 pub use model::{
@@ -23,6 +27,7 @@ pub use model::{
     ScenarioBuilding, ScenarioLandUse, ScenarioProvenance, ScenarioRoad, ScenarioTransitAnchor,
     ScenarioWater, TransitKind, WaterKind,
 };
+#[cfg(not(target_arch = "wasm32"))]
 pub use osm::{GEO_ANALYSIS_REVISION, OSM_PARSER_REPOSITORY, import_osm_pbf_bytes};
 pub use planning::{
     CityPlanningOverlay, EffectiveRoad, EffectiveRoadOrigin, PlannedRoad, PlannedZone,
