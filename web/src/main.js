@@ -1,4 +1,7 @@
 import { createThreeSceneRenderer, validateRenderFrame } from "@moritzbrantner/three-d-renderer";
+import { CityGameSession, createCityGameRuntime } from "./wasm.js";
+
+const DEFAULT_FRAME_ASPECT = 16 / 9;
 
 const canvas = document.querySelector("#scene");
 const scenarioList = document.querySelector("#scenario-list");
@@ -13,7 +16,10 @@ if (!(canvas instanceof HTMLCanvasElement) || !(scenarioList instanceof HTMLElem
   throw new Error("city-game scenario surface is incomplete");
 }
 
-const manifestResponse = await fetch("./scenarios.json");
+const [manifestResponse, runtime] = await Promise.all([
+  fetch("./scenarios.json"),
+  createCityGameRuntime("./city-game-core.wasm"),
+]);
 if (!manifestResponse.ok) {
   throw new Error(`failed to load scenario manifest: ${manifestResponse.status}`);
 }
@@ -30,6 +36,7 @@ for (const scenario of manifest.scenarios) {
     typeof scenario?.region !== "string" ||
     typeof scenario?.description !== "string" ||
     typeof scenario?.dataKind !== "string" ||
+    typeof scenario?.scenario !== "string" ||
     typeof scenario?.frame !== "string" ||
     scenarios.has(scenario.id)
   ) {
@@ -45,6 +52,7 @@ const renderer = createThreeSceneRenderer(canvas, {
   shadows: false,
 });
 let currentFrame = null;
+let currentSession = null;
 let loadGeneration = 0;
 const buttons = new Map();
 
@@ -58,17 +66,21 @@ function render() {
 
 async function selectScenario(scenario, updateUrl = true) {
   const generation = ++loadGeneration;
-  statusLabel.textContent = `Loading ${scenario.name}…`;
-  const response = await fetch(scenario.frame);
+  statusLabel.textContent = `Loading ${scenario.name} through Rust/WASM…`;
+
+  const response = await fetch(scenario.scenario);
   if (!response.ok) {
-    throw new Error(`failed to load ${scenario.name}: ${response.status}`);
+    throw new Error(`failed to load ${scenario.name} scenario: ${response.status}`);
   }
-  const frame = validateRenderFrame(await response.json());
+  const canonicalScenario = await response.json();
+  const session = CityGameSession.create(runtime, canonicalScenario);
+  const frame = validateRenderFrame(session.renderFrame(DEFAULT_FRAME_ASPECT));
   if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
     throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
   }
   if (generation !== loadGeneration) return;
 
+  currentSession = session;
   currentFrame = frame;
   canvas.style.aspectRatio = String(frame.camera.aspect);
   scenarioLabel.textContent = scenario.name;
@@ -76,7 +88,7 @@ async function selectScenario(scenario, updateUrl = true) {
   objectsLabel.textContent = String(frame.nodes.length);
   dataKindLabel.textContent = scenario.dataKind;
   descriptionLabel.textContent = scenario.description;
-  statusLabel.textContent = "";
+  statusLabel.textContent = "Rust/WASM simulation state active";
   for (const [id, button] of buttons) {
     button.setAttribute("aria-pressed", String(id === scenario.id));
   }
@@ -114,6 +126,7 @@ await selectScenario(initialScenario);
 const observer = new ResizeObserver(render);
 observer.observe(canvas);
 window.addEventListener("pagehide", () => {
+  currentSession = null;
   observer.disconnect();
   renderer.dispose();
 });
