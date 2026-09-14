@@ -678,6 +678,7 @@ mod tests {
                 name: None,
                 levels: Some(4),
                 height_m: None,
+                gross_floor_area_m2: 3_600,
             }],
             water: Vec::new(),
             land_use_areas: Vec::new(),
