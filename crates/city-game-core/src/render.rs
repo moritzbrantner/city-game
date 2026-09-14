@@ -704,7 +704,7 @@ mod tests {
 
     #[test]
     fn save_frame_projects_effective_planning_overlay() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.apply_planning(PlanningCommand::SuppressScenarioEntity {
             id: "imported/way/10".to_owned(),
         })

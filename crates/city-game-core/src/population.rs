@@ -358,6 +358,30 @@ mod tests {
     }
 
     #[test]
+    fn invalid_deserialized_rules_fail_before_authoritative_step_mutates_world() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.population_rules = serde_json::from_str(
+            r#"{
+                "residentialFloorAreaM2PerHousehold": 0,
+                "commercialFloorAreaM2PerJob": 35,
+                "industrialFloorAreaM2PerJob": 60,
+                "initialOccupancyBasisPoints": 9000,
+                "targetOccupancyBasisPoints": 10001
+            }"#,
+        )
+        .unwrap();
+        let before = save.clone();
+
+        assert!(matches!(
+            save.advance_fixed_steps(1),
+            Err(crate::CitySaveError::Population(
+                PopulationError::InvalidRule(_)
+            ))
+        ));
+        assert_eq!(save, before);
+    }
+
+    #[test]
     fn save_construction_returns_capacity_overflow() {
         let mut overflowing = scenario();
         overflowing.buildings = vec![

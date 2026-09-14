@@ -12,8 +12,8 @@ mod render;
 mod time;
 
 pub use model::{
-    BuildingUse, CitySave, CityScenario, CityWorld, ExternalRevision, LandUseKind, RoadClass,
-    SAVE_SCHEMA_VERSION, SCENARIO_SCHEMA_VERSION, ScenarioBuilding, ScenarioLandUse,
+    BuildingUse, CitySave, CitySaveError, CityScenario, CityWorld, ExternalRevision, LandUseKind,
+    RoadClass, SAVE_SCHEMA_VERSION, SCENARIO_SCHEMA_VERSION, ScenarioBuilding, ScenarioLandUse,
     ScenarioProvenance, ScenarioRoad, ScenarioTransitAnchor, ScenarioWater, TransitKind, WaterKind,
 };
 pub use osm::{GEO_ANALYSIS_REVISION, OSM_PARSER_REPOSITORY, import_osm_pbf_bytes};

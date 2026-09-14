@@ -381,7 +381,7 @@ mod tests {
 
     #[test]
     fn repeated_commands_are_idempotent_but_conflicting_reuse_fails_closed() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         let road = PlannedRoad {
             id: "player/road/1".to_owned(),
             geometry: line(8.01),
@@ -413,7 +413,7 @@ mod tests {
 
     #[test]
     fn planning_never_mutates_imported_scenario() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         let original = save.scenario.clone();
 
         save.apply_planning(PlanningCommand::SuppressScenarioEntity {
@@ -435,7 +435,7 @@ mod tests {
 
     #[test]
     fn effective_roads_merge_scenario_and_player_state_deterministically() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.apply_planning(PlanningCommand::AddRoad {
             road: PlannedRoad {
                 id: "player/road/1".to_owned(),
@@ -464,7 +464,7 @@ mod tests {
 
     #[test]
     fn save_roundtrip_and_restart_preserve_canonical_scenario_boundary() {
-        let mut save = CitySave::new(scenario());
+        let mut save = CitySave::new(scenario()).unwrap();
         save.advance_tick().unwrap();
         save.apply_planning(PlanningCommand::ZoneArea {
             zone: PlannedZone {

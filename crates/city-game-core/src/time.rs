@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CityScenario, CityWorld};
+use crate::{CitySave, CitySaveError, CityScenario, CityWorld};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
@@ -111,9 +111,9 @@ impl CitySave {
     pub fn new_with_time_config(
         scenario: CityScenario,
         time: CityTimeConfig,
-    ) -> Result<Self, CityTimeError> {
+    ) -> Result<Self, CitySaveError> {
         time.validate()?;
-        let mut save = Self::new(scenario);
+        let mut save = Self::new(scenario)?;
         save.time = time;
         Ok(save)
     }
@@ -122,12 +122,13 @@ impl CitySave {
         self.time.position(self.world.tick)
     }
 
-    pub fn advance_tick(&mut self) -> Result<CityTimePosition, CityTimeError> {
+    pub fn advance_tick(&mut self) -> Result<CityTimePosition, CitySaveError> {
         self.advance_fixed_steps(1)
     }
 
-    pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CityTimeError> {
-        self.world.advance_fixed_steps(self.time, steps)
+    pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
+        self.validate_population_configuration()?;
+        Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
 
@@ -207,21 +208,21 @@ mod tests {
         );
 
         let invalid: CityTimeConfig = serde_json::from_str(r#"{"minutesPerTick":7}"#).unwrap();
-        let mut invalid_save = CitySave::new(scenario());
+        let mut invalid_save = CitySave::new(scenario()).unwrap();
         invalid_save.time = invalid;
         let before_invalid = invalid_save.clone();
         assert_eq!(
             invalid_save.advance_fixed_steps(1),
-            Err(CityTimeError::InvalidMinutesPerTick(7))
+            Err(CitySaveError::Time(CityTimeError::InvalidMinutesPerTick(7)))
         );
         assert_eq!(invalid_save, before_invalid);
 
-        let mut overflow_save = CitySave::new(scenario());
+        let mut overflow_save = CitySave::new(scenario()).unwrap();
         overflow_save.world.tick = u64::MAX - 1;
         let before_overflow = overflow_save.clone();
         assert_eq!(
             overflow_save.advance_fixed_steps(2),
-            Err(CityTimeError::TickOverflow)
+            Err(CitySaveError::Time(CityTimeError::TickOverflow))
         );
         assert_eq!(overflow_save, before_overflow);
     }

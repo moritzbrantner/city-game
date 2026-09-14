@@ -403,8 +403,9 @@ fn ring_area_m2(ring: &[[f64; 2]]) -> f64 {
     let origin_lat = ring.iter().map(|position| position[1]).sum::<f64>() / ring.len() as f64;
     let longitude_meters_per_degree = LATITUDE_METERS_PER_DEGREE * origin_lat.to_radians().cos();
     let project = |position: [f64; 2]| {
+        let longitude_delta = (position[0] - origin_lon + 180.0).rem_euclid(360.0) - 180.0;
         [
-            (position[0] - origin_lon) * longitude_meters_per_degree,
+            longitude_delta * longitude_meters_per_degree,
             (position[1] - origin_lat) * LATITUDE_METERS_PER_DEGREE,
         ]
     };
@@ -547,6 +548,22 @@ mod tests {
         assert!(!encoded.contains("\"highway\""));
         assert!(!encoded.contains("\"building:levels\""));
         assert!(encoded.contains("grossFloorAreaM2"));
+    }
+
+    #[test]
+    fn footprint_area_uses_the_short_path_across_the_antimeridian() {
+        let crossing = Geometry::Polygon {
+            coordinates: vec![vec![
+                [179.9999, 0.0],
+                [-179.9999, 0.0],
+                [-179.9999, 0.0001],
+                [179.9999, 0.0001],
+                [179.9999, 0.0],
+            ]],
+        };
+
+        let area = geometry_area_m2(&crossing);
+        assert!((200..=300).contains(&area), "unexpected area: {area}");
     }
 
     #[test]

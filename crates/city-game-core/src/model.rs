@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CityPlanningOverlay, CityTimeConfig, PopulationError, PopulationRules, PopulationState,
-    ProgressionState,
+    CityPlanningOverlay, CityTimeConfig, CityTimeError, PopulationError, PopulationRules,
+    PopulationState, ProgressionState,
 };
 
 pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
@@ -191,6 +191,35 @@ pub struct CitySave {
     pub time: CityTimeConfig,
     pub population_rules: PopulationRules,
     pub world: CityWorld,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CitySaveError {
+    Time(CityTimeError),
+    Population(PopulationError),
+}
+
+impl fmt::Display for CitySaveError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Time(error) => error.fmt(formatter),
+            Self::Population(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for CitySaveError {}
+
+impl From<CityTimeError> for CitySaveError {
+    fn from(error: CityTimeError) -> Self {
+        Self::Time(error)
+    }
+}
+
+impl From<PopulationError> for CitySaveError {
+    fn from(error: PopulationError) -> Self {
+        Self::Population(error)
+    }
 }
 
 impl CitySave {
