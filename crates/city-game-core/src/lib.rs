@@ -2,7 +2,8 @@
 //!
 //! OSM parsing stays in `moenarch-geo-io-osm`; generic camera/renderer mechanics stay in 3d-lab.
 //! OSM is an import format only: simulation and persistence operate on the canonical game schema.
-//! Application writes enter through [`CitySave::execute`]; reads use [`CitySave::queries`].
+//! Application writes enter through [`CitySave::execute`]; reads use [`CitySave::query`] or
+//! [`CitySave::queries`].
 
 mod commands;
 mod model;
@@ -31,7 +32,7 @@ pub use population::{
     PopulationCapacity, PopulationError, PopulationRules, PopulationState, RciDemand,
 };
 pub use progression::{ProgressionRule, ProgressionState, Requirement};
-pub use queries::{CityQueries, CityQueryError};
+pub use queries::{CityQueries, CityQuery, CityQueryError, CityQueryResult};
 pub use render::{
     RendererCamera, RendererFrame, RendererGeometry, RendererSceneNode, RendererTransform,
     THREE_D_LAB_REVISION, build_render_frame, build_save_render_frame,
