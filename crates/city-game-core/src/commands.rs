@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::{
-    CitySave, CityWorld, PlanningCommand, PlanningError, PlanningOutcome, PopulationError, RuleSystem,
-    RulesetError,
+    CitySave, CityWorld, PlanningCommand, PlanningError, PlanningOutcome, PopulationError,
+    RuleSystem, RulesetError,
 };
 
 #[derive(Debug, Clone, PartialEq)]
