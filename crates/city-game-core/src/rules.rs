@@ -14,17 +14,12 @@ pub enum RuleSystem {
     Progression,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RuleStatus {
     Disabled,
+    #[default]
     Enabled,
-}
-
-impl Default for RuleStatus {
-    fn default() -> Self {
-        Self::Enabled
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,8 +139,10 @@ mod tests {
             unlocks: "waste-management".to_owned(),
             all: Vec::new(),
         };
-        let mut ruleset = CityRuleset::default();
-        ruleset.progression_rules = vec![rule.clone(), rule];
+        let ruleset = CityRuleset {
+            progression_rules: vec![rule.clone(), rule],
+            ..CityRuleset::default()
+        };
 
         assert_eq!(
             ruleset.validate(),
