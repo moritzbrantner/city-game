@@ -536,7 +536,10 @@ mod tests {
         assert_eq!(first.buildings.len(), 1);
         assert_eq!(first.buildings[0].use_kind, BuildingUse::Residential);
         assert_eq!(first.buildings[0].levels, Some(4));
-        assert!(matches!(first.buildings[0].footprint, Geometry::Polygon { .. }));
+        assert!(matches!(
+            first.buildings[0].footprint,
+            Geometry::Polygon { .. }
+        ));
         assert!(first.buildings[0].gross_floor_area_m2 > 0);
 
         let encoded = serde_json::to_string(&first).unwrap();
