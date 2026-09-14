@@ -127,8 +127,7 @@ fn normalize_feature(feature: OsmFeature) -> NormalizedFeature {
                 .tags
                 .get("height")
                 .and_then(|value| parse_height_m(value));
-            let gross_floor_area_m2 =
-                gross_floor_area_m2(&feature.geometry, levels, height_m);
+            let gross_floor_area_m2 = gross_floor_area_m2(&feature.geometry, levels, height_m);
             NormalizedFeature::Building(ScenarioBuilding {
                 id,
                 source_id,
@@ -347,11 +346,15 @@ fn gross_floor_area_m2(geometry: &Geometry, levels: Option<u16>, height_m: Optio
 fn geometry_area_m2(geometry: &Geometry) -> u64 {
     let area = match geometry {
         Geometry::Polygon { coordinates } => polygon_area_m2(coordinates),
-        Geometry::MultiPolygon { coordinates } => coordinates.iter().map(|polygon| polygon_area_m2(polygon)).sum(),
+        Geometry::MultiPolygon { coordinates } => coordinates
+            .iter()
+            .map(|polygon| polygon_area_m2(polygon))
+            .sum(),
         Geometry::GeometryCollection { geometries } => geometries
             .iter()
             .map(geometry_area_m2)
-            .fold(0_u64, u64::saturating_add) as f64,
+            .fold(0_u64, u64::saturating_add)
+            as f64,
         Geometry::Point { .. }
         | Geometry::MultiPoint { .. }
         | Geometry::LineString { .. }
