@@ -195,10 +195,16 @@ impl fmt::Display for OsmScenarioTransformError {
                 "unsupported OSM scenario transform schema version {version}; expected {OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION}"
             ),
             Self::EmptyRoadMapping(index) => {
-                write!(formatter, "OSM road mapping {index} has no source road classes")
+                write!(
+                    formatter,
+                    "OSM road mapping {index} has no source road classes"
+                )
             }
             Self::DuplicateRoadSource(source) => {
-                write!(formatter, "OSM road class {source:?} is mapped more than once")
+                write!(
+                    formatter,
+                    "OSM road class {source:?} is mapped more than once"
+                )
             }
         }
     }
