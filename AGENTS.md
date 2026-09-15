@@ -29,12 +29,14 @@
 
 ## Scenario and persistence boundary
 
-- `OSM bytes -> geo-analysis parser model -> canonical CityScenario -> mutable CityWorld/planning -> CitySave`.
+- `OSM bytes -> geo-analysis parser model -> configurable city-game scenario transform -> canonical CityScenario -> mutable CityWorld/planning -> CitySave`.
+- `OsmScenarioTransformConfig` is scenario-generation policy. It must not become a `CityRuleset` subsystem or runtime/browser rule source.
 - The canonical scenario is game-native. Runtime systems must not interpret OSM keys such as `highway`, `building`, or `landuse`.
 - Keep per-entity source IDs only as provenance/reimport references; they are not simulation semantics.
 - Materialize physical measurements that later simulation needs at import time when they are derived from geographic source geometry. Building `grossFloorAreaM2` is canonical game data after import; population simulation must not repeatedly reinterpret latitude/longitude geometry or OSM level tags.
 - Imported scenario entities are immutable. Player redevelopment, removal, roads, and zoning belong in mutable game-domain state layered over the scenario.
 - Saves serialize game-native scenario/world state and never serialize back to OSM.
+- Configured OSM imports may emit an `OsmScenarioImportReceipt` as external build evidence. Keep that receipt outside `CityScenario` and `CitySave`; it binds source/parser provenance, transformer revision, exact transform configuration, and generated scenario digest without becoming simulation state.
 - For now, scenario, save, and ruleset persistence accept only the exact current schema versions. Do not add implicit legacy defaults or compatibility migrations until persisted backward compatibility becomes an explicit product requirement.
 
 ## Aggregate population and demand
@@ -49,6 +51,7 @@
 ## Determinism, time, and provenance
 
 - Imported source bytes are identified by SHA-256 and the exact accepted parser revision.
+- A configured scenario import receipt must deterministically bind the source provenance, semantic transformer revision, serialized transform configuration digest, and serialized output scenario digest. Changing the config or generated scenario must change the relevant digest.
 - Normalize canonical entity ordering before it becomes scenario state.
 - Planning and progression evaluation must be deterministic, input-order independent where applicable, and idempotent.
 - Authoritative simulation advances only in explicit integer fixed steps. Browser frame delta, wall-clock duration, and playback speed are not simulation inputs.
@@ -75,4 +78,4 @@ Progression is rule/data driven. UI code may explain unlocks but must not decide
 
 ## Validation
 
-Do not treat absent CI as green. Repository-owned validation should cover the parser-consumer boundary, absence of raw OSM tag dependence after import, canonical physical measurements, deterministic command/query/rule behavior, planning/progression/time/population demand, strict current-schema persistence, save provenance, restart semantics, renderer-frame serialization, the canonical browser build, and the required Pages delivery contract. Once lockfiles are established, validation should run with frozen/locked dependency state.
+Do not treat absent CI as green. Repository-owned validation should cover the parser-consumer boundary, deterministic configured-import receipts, absence of raw OSM tag dependence after import, canonical physical measurements, deterministic command/query/rule behavior, planning/progression/time/population demand, strict current-schema persistence, save provenance, restart semantics, renderer-frame serialization, the canonical browser build, and the required Pages delivery contract. Once lockfiles are established, validation should run with frozen/locked dependency state.

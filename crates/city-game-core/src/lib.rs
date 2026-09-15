@@ -34,8 +34,10 @@ pub use model::{
 pub use osm::{GEO_ANALYSIS_REVISION, OSM_PARSER_REPOSITORY, import_osm_pbf_bytes};
 #[cfg(not(target_arch = "wasm32"))]
 pub use osm_transform::{
-    OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION, OsmFeatureTransformPolicy, OsmRoadClassMapping,
-    OsmRoadTransformConfig, OsmScenarioTransformConfig, OsmScenarioTransformError,
+    OSM_SCENARIO_IMPORT_RECEIPT_SCHEMA_VERSION, OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION,
+    OSM_SCENARIO_TRANSFORMER_REPOSITORY, OSM_SCENARIO_TRANSFORMER_REVISION,
+    OsmFeatureTransformPolicy, OsmRoadClassMapping, OsmRoadTransformConfig,
+    OsmScenarioImportReceipt, OsmScenarioTransformConfig, OsmScenarioTransformError,
     OsmUnmappedRoadPolicy,
 };
 pub use planning::{
