@@ -1,13 +1,16 @@
 use std::fmt;
 
+use serde::{Deserialize, Serialize, Serializer};
+
 use crate::{
     CitySave, CityWorld, PlanningCommand, PlanningError, PlanningOutcome, PopulationError,
     RuleSystem, RulesetError,
 };
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
 pub enum CityCommand {
-    Planning(PlanningCommand),
+    Planning { command: PlanningCommand },
     Restart,
 }
 
@@ -15,6 +18,31 @@ pub enum CityCommand {
 pub enum CityCommandOutcome {
     Planning(PlanningOutcome),
     Restarted,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum CityCommandOutcomeWire {
+    Planning { outcome: &'static str },
+    Restarted,
+}
+
+impl Serialize for CityCommandOutcome {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let wire = match self {
+            Self::Planning(PlanningOutcome::Applied) => {
+                CityCommandOutcomeWire::Planning { outcome: "applied" }
+            }
+            Self::Planning(PlanningOutcome::Unchanged) => CityCommandOutcomeWire::Planning {
+                outcome: "unchanged",
+            },
+            Self::Restarted => CityCommandOutcomeWire::Restarted,
+        };
+        wire.serialize(serializer)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,7 +96,7 @@ impl CitySave {
         self.ruleset.validate()?;
 
         match command {
-            CityCommand::Planning(command) => {
+            CityCommand::Planning { command } => {
                 if !self.ruleset.is_enabled(RuleSystem::Planning) {
                     return Err(CityCommandError::SystemDisabled(RuleSystem::Planning));
                 }
@@ -115,6 +143,50 @@ mod tests {
     }
 
     #[test]
+    fn commands_roundtrip_as_stable_tagged_application_contract() {
+        let command = CityCommand::Planning {
+            command: PlanningCommand::RemovePlayerRoad {
+                id: "player/road/1".to_owned(),
+            },
+        };
+        let encoded = serde_json::to_value(&command).unwrap();
+        let decoded: CityCommand = serde_json::from_value(encoded.clone()).unwrap();
+
+        assert_eq!(decoded, command);
+        assert_eq!(encoded["kind"], "planning");
+        assert_eq!(encoded["command"]["kind"], "removePlayerRoad");
+        assert_eq!(encoded["command"]["id"], "player/road/1");
+    }
+
+    #[test]
+    fn command_outcomes_have_transport_safe_shape() {
+        let planning =
+            serde_json::to_value(CityCommandOutcome::Planning(PlanningOutcome::Applied)).unwrap();
+        let restarted = serde_json::to_value(CityCommandOutcome::Restarted).unwrap();
+
+        assert_eq!(planning["kind"], "planning");
+        assert_eq!(planning["outcome"], "applied");
+        assert_eq!(restarted["kind"], "restarted");
+    }
+
+    #[test]
+    fn simulation_operations_are_not_application_commands() {
+        assert!(
+            serde_json::from_value::<CityCommand>(serde_json::json!({
+                "kind": "advanceFixedSteps",
+                "steps": 4
+            }))
+            .is_err()
+        );
+        assert!(
+            serde_json::from_value::<CityCommand>(serde_json::json!({
+                "kind": "evaluateProgression"
+            }))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn disabled_planning_rejects_write_without_mutation() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
@@ -122,9 +194,11 @@ mod tests {
         let before = save.clone();
 
         assert_eq!(
-            save.execute(CityCommand::Planning(PlanningCommand::RemovePlayerRoad {
-                id: "player/road/1".to_owned(),
-            })),
+            save.execute(CityCommand::Planning {
+                command: PlanningCommand::RemovePlayerRoad {
+                    id: "player/road/1".to_owned(),
+                },
+            }),
             Err(CityCommandError::SystemDisabled(RuleSystem::Planning))
         );
         assert_eq!(save, before);

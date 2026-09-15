@@ -4,7 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use city_game_core::{
-    CitySave, CityScenario, CityTimeConfig, build_render_frame, import_osm_pbf_bytes,
+    CityCommand, CityQuery, CitySave, CityScenario, CityTimeConfig, build_render_frame,
+    import_osm_pbf_bytes,
 };
 
 const DEFAULT_FRAME_ASPECT: f32 = 16.0 / 9.0;
@@ -24,6 +25,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         [_, command, input, output, steps] if command == "step" => {
             step_save(input, output, steps.parse::<u64>()?)
         }
+        [_, command, save, request, output_save, outcome] if command == "command" => {
+            execute_command(save, request, output_save, outcome)
+        }
+        [_, command, save, request, result] if command == "query" => query(save, request, result),
         [_, command, input, output] if command == "frame" => {
             frame(input, output, DEFAULT_FRAME_ASPECT)
         }
@@ -35,6 +40,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             eprintln!("  city-game-cli import <input.osm.pbf> <scenario.json>");
             eprintln!("  city-game-cli new-save <scenario.json> <save.json> [minutes-per-tick]");
             eprintln!("  city-game-cli step <save.json> <output-save.json> <steps>");
+            eprintln!(
+                "  city-game-cli command <save.json> <command.json> <output-save.json> <outcome.json>"
+            );
+            eprintln!("  city-game-cli query <save.json> <query.json> <result.json>");
             eprintln!("  city-game-cli frame <scenario.json> <frame.json> [aspect]");
             std::process::exit(2);
         }
@@ -52,23 +61,52 @@ fn import(input: &str, output: &str) -> Result<(), Box<dyn Error>> {
 }
 
 fn new_save(input: &str, output: &str, time: CityTimeConfig) -> Result<(), Box<dyn Error>> {
-    let scenario: CityScenario = serde_json::from_slice(&fs::read(input)?)?;
+    let scenario: CityScenario = read_json(input)?;
     scenario.validate_schema()?;
     let save = CitySave::new_with_time_config(scenario, time)?;
     write_json(output, &save)
 }
 
 fn step_save(input: &str, output: &str, steps: u64) -> Result<(), Box<dyn Error>> {
-    let mut save: CitySave = serde_json::from_slice(&fs::read(input)?)?;
+    let mut save: CitySave = read_json(input)?;
     save.advance_fixed_steps(steps)?;
     write_json(output, &save)
 }
 
+fn execute_command(
+    save_path: &str,
+    command_path: &str,
+    output_save: &str,
+    outcome_path: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut save: CitySave = read_json(save_path)?;
+    let command: CityCommand = read_json(command_path)?;
+    let outcome = save.execute(command)?;
+
+    // Do not replace the authoritative save unless the separate outcome can be persisted first.
+    write_json(outcome_path, &outcome)?;
+    write_json(output_save, &save)
+}
+
+fn query(save_path: &str, query_path: &str, result_path: &str) -> Result<(), Box<dyn Error>> {
+    let save: CitySave = read_json(save_path)?;
+    let query: CityQuery = read_json(query_path)?;
+    let result = save.query(query)?;
+    write_json(result_path, &result)
+}
+
 fn frame(input: &str, output: &str, aspect: f32) -> Result<(), Box<dyn Error>> {
-    let scenario: CityScenario = serde_json::from_slice(&fs::read(input)?)?;
+    let scenario: CityScenario = read_json(input)?;
     scenario.validate_schema()?;
     let frame = build_render_frame(&scenario, aspect)?;
     write_json(output, &frame)
+}
+
+fn read_json<T>(path: &str) -> Result<T, Box<dyn Error>>
+where
+    T: serde::de::DeserializeOwned,
+{
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
 }
 
 fn write_json(path: &str, value: &impl serde::Serialize) -> Result<(), Box<dyn Error>> {
