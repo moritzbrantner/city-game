@@ -104,18 +104,18 @@ mod tests {
     }
 
     #[test]
-    fn browser_transport_executes_the_same_command_contract() {
-        let save = CitySave::new(scenario()).unwrap();
+    fn browser_transport_executes_the_same_application_command_contract() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.world.tick = 4;
         let save_json = serde_json::to_string(&save).unwrap();
-        let command_json =
-            serde_json::to_string(&CityCommand::AdvanceFixedSteps { steps: 4 }).unwrap();
+        let command_json = serde_json::to_string(&CityCommand::Restart).unwrap();
 
         let response: Value =
             serde_json::from_str(&execute_json(&save_json, &command_json)).unwrap();
 
         assert_eq!(response["ok"], true);
-        assert_eq!(response["save"]["world"]["tick"], 4);
-        assert_eq!(response["outcome"]["kind"], "advanced");
+        assert_eq!(response["save"]["world"]["tick"], 0);
+        assert_eq!(response["outcome"]["kind"], "restarted");
     }
 
     #[test]
