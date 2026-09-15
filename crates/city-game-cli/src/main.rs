@@ -69,7 +69,7 @@ fn new_save(input: &str, output: &str, time: CityTimeConfig) -> Result<(), Box<d
 
 fn step_save(input: &str, output: &str, steps: u64) -> Result<(), Box<dyn Error>> {
     let mut save: CitySave = read_json(input)?;
-    save.execute(CityCommand::AdvanceFixedSteps { steps })?;
+    save.advance_fixed_steps(steps)?;
     write_json(output, &save)
 }
 
@@ -82,8 +82,10 @@ fn execute_command(
     let mut save: CitySave = read_json(save_path)?;
     let command: CityCommand = read_json(command_path)?;
     let outcome = save.execute(command)?;
-    write_json(output_save, &save)?;
-    write_json(outcome_path, &outcome)
+
+    // Do not replace the authoritative save unless the separate outcome can be persisted first.
+    write_json(outcome_path, &outcome)?;
+    write_json(output_save, &save)
 }
 
 fn query(save_path: &str, query_path: &str, result_path: &str) -> Result<(), Box<dyn Error>> {
