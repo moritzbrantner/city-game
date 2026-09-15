@@ -4,7 +4,7 @@ use std::fs;
 use std::path::Path;
 
 use city_game_core::{
-    CityCommand, CitySave, CityScenario, CityTimeConfig, build_render_frame, import_osm_pbf_bytes,
+    CitySave, CityScenario, CityTimeConfig, build_render_frame, import_osm_pbf_bytes,
 };
 
 const DEFAULT_FRAME_ASPECT: f32 = 16.0 / 9.0;
@@ -60,7 +60,7 @@ fn new_save(input: &str, output: &str, time: CityTimeConfig) -> Result<(), Box<d
 
 fn step_save(input: &str, output: &str, steps: u64) -> Result<(), Box<dyn Error>> {
     let mut save: CitySave = serde_json::from_slice(&fs::read(input)?)?;
-    save.execute(CityCommand::AdvanceFixedSteps { steps })?;
+    save.advance_fixed_steps(steps)?;
     write_json(output, &save)
 }
 
