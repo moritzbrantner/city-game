@@ -4,8 +4,8 @@ use std::fs;
 use std::path::Path;
 
 use city_game_core::{
-    CityCommand, CityQuery, CitySave, CityScenario, CityTimeConfig, build_render_frame,
-    import_osm_pbf_bytes,
+    CityCommand, CityQuery, CitySave, CityScenario, CityTimeConfig, OsmScenarioTransformConfig,
+    build_render_frame, import_osm_pbf_bytes,
 };
 
 const DEFAULT_FRAME_ASPECT: f32 = 16.0 / 9.0;
@@ -13,7 +13,10 @@ const DEFAULT_FRAME_ASPECT: f32 = 16.0 / 9.0;
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().collect::<Vec<_>>();
     match args.as_slice() {
-        [_, command, input, output] if command == "import" => import(input, output),
+        [_, command, input, output] if command == "import" => import(input, output, None),
+        [_, command, input, output, transform_config] if command == "import" => {
+            import(input, output, Some(transform_config))
+        }
         [_, command, input, output] if command == "new-save" => {
             new_save(input, output, CityTimeConfig::default())
         }
@@ -37,7 +40,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
         _ => {
             eprintln!("usage:");
-            eprintln!("  city-game-cli import <input.osm.pbf> <scenario.json>");
+            eprintln!(
+                "  city-game-cli import <input.osm.pbf> <scenario.json> [transform-config.json]"
+            );
             eprintln!("  city-game-cli new-save <scenario.json> <save.json> [minutes-per-tick]");
             eprintln!("  city-game-cli step <save.json> <output-save.json> <steps>");
             eprintln!(
@@ -50,13 +55,24 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn import(input: &str, output: &str) -> Result<(), Box<dyn Error>> {
+fn import(
+    input: &str,
+    output: &str,
+    transform_config: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     let bytes = fs::read(input)?;
     let source_name = Path::new(input)
         .file_name()
         .and_then(|value| value.to_str())
         .unwrap_or(input);
     let scenario = import_osm_pbf_bytes(source_name, &bytes)?;
+    let scenario = match transform_config {
+        Some(path) => {
+            let config: OsmScenarioTransformConfig = read_json(path)?;
+            config.transform(scenario)?
+        }
+        None => scenario,
+    };
     write_json(output, &scenario)
 }
 
