@@ -11,6 +11,8 @@ export async function createCityGameRuntime(url = "./city-game-core.wasm") {
 }
 
 class CityGameRuntime {
+  #exports;
+
   constructor(exports) {
     const required = [
       "memory",
@@ -26,31 +28,58 @@ class CityGameRuntime {
         throw new Error(`city-game WASM is missing export ${name}`);
       }
     }
-    this.exports = exports;
+    this.#exports = exports;
   }
 
-  newSave(scenario) {
-    return this.#call([scenario], (input) => this.exports.city_game_new_save(input.ptr, input.len));
+  createSession(scenario) {
+    const response = requireSuccess(this.#newSave(scenario));
+    let save = response.save;
+
+    return new CityGameSession(
+      (command) => {
+        const commandResponse = requireSuccess(this.#execute(save, command));
+        save = commandResponse.save;
+        return commandResponse.outcome;
+      },
+      (query) => requireSuccess(this.#query(save, query)).result,
+      (aspect) => requireSuccess(this.#renderFrame(save, aspect)).frame,
+    );
   }
 
-  execute(save, command) {
+  #newSave(scenario) {
+    return this.#call([scenario], (input) =>
+      this.#exports.city_game_new_save(input.ptr, input.len),
+    );
+  }
+
+  #execute(save, command) {
     return this.#call([save, command], (saveInput, commandInput) =>
-      this.exports.city_game_execute(saveInput.ptr, saveInput.len, commandInput.ptr, commandInput.len),
+      this.#exports.city_game_execute(
+        saveInput.ptr,
+        saveInput.len,
+        commandInput.ptr,
+        commandInput.len,
+      ),
     );
   }
 
-  query(save, query) {
+  #query(save, query) {
     return this.#call([save, query], (saveInput, queryInput) =>
-      this.exports.city_game_query(saveInput.ptr, saveInput.len, queryInput.ptr, queryInput.len),
+      this.#exports.city_game_query(
+        saveInput.ptr,
+        saveInput.len,
+        queryInput.ptr,
+        queryInput.len,
+      ),
     );
   }
 
-  renderFrame(save, aspect) {
+  #renderFrame(save, aspect) {
     if (!Number.isFinite(aspect) || aspect <= 0) {
       throw new Error("render aspect must be finite and positive");
     }
     return this.#call([save], (input) =>
-      this.exports.city_game_render_frame(input.ptr, input.len, aspect),
+      this.#exports.city_game_render_frame(input.ptr, input.len, aspect),
     );
   }
 
@@ -60,18 +89,18 @@ class CityGameRuntime {
       return this.#read(invoke(...inputs));
     } finally {
       for (const input of inputs) {
-        this.exports.city_game_free(input.ptr, input.len);
+        this.#exports.city_game_free(input.ptr, input.len);
       }
     }
   }
 
   #write(value) {
     const bytes = encoder.encode(JSON.stringify(value));
-    const ptr = this.exports.city_game_alloc(bytes.length);
+    const ptr = this.#exports.city_game_alloc(bytes.length);
     if (bytes.length > 0 && ptr === 0) {
       throw new Error("city-game WASM failed to allocate input memory");
     }
-    new Uint8Array(this.exports.memory.buffer, ptr, bytes.length).set(bytes);
+    new Uint8Array(this.#exports.memory.buffer, ptr, bytes.length).set(bytes);
     return { ptr, len: bytes.length };
   }
 
@@ -84,37 +113,35 @@ class CityGameRuntime {
     }
 
     try {
-      const json = decoder.decode(new Uint8Array(this.exports.memory.buffer, ptr, len));
+      const json = decoder.decode(new Uint8Array(this.#exports.memory.buffer, ptr, len));
       return JSON.parse(json);
     } finally {
-      this.exports.city_game_free(ptr, len);
+      this.#exports.city_game_free(ptr, len);
     }
   }
 }
 
-export class CityGameSession {
-  static create(runtime, scenario) {
-    const response = requireSuccess(runtime.newSave(scenario));
-    return new CityGameSession(runtime, response.save);
-  }
+class CityGameSession {
+  #executeCommand;
+  #queryState;
+  #render;
 
-  constructor(runtime, save) {
-    this.runtime = runtime;
-    this.save = save;
+  constructor(executeCommand, queryState, render) {
+    this.#executeCommand = executeCommand;
+    this.#queryState = queryState;
+    this.#render = render;
   }
 
   execute(command) {
-    const response = requireSuccess(this.runtime.execute(this.save, command));
-    this.save = response.save;
-    return response.outcome;
+    return this.#executeCommand(command);
   }
 
   query(query) {
-    return requireSuccess(this.runtime.query(this.save, query)).result;
+    return this.#queryState(query);
   }
 
   renderFrame(aspect) {
-    return requireSuccess(this.runtime.renderFrame(this.save, aspect)).frame;
+    return this.#render(aspect);
   }
 }
 
