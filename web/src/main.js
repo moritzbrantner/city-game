@@ -1,5 +1,5 @@
 import { createThreeSceneRenderer, validateRenderFrame } from "@moritzbrantner/three-d-renderer";
-import { CityGameSession, createCityGameRuntime } from "./wasm.js";
+import { createCityGameRuntime } from "./wasm.js";
 
 const DEFAULT_FRAME_ASPECT = 16 / 9;
 
@@ -73,7 +73,7 @@ async function selectScenario(scenario, updateUrl = true) {
     throw new Error(`failed to load ${scenario.name} scenario: ${response.status}`);
   }
   const canonicalScenario = await response.json();
-  const session = CityGameSession.create(runtime, canonicalScenario);
+  const session = runtime.createSession(canonicalScenario);
   const frame = validateRenderFrame(session.renderFrame(DEFAULT_FRAME_ASPECT));
   if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
     throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
