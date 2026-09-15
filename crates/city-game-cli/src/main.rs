@@ -55,11 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn import(
-    input: &str,
-    output: &str,
-    transform_config: Option<&str>,
-) -> Result<(), Box<dyn Error>> {
+fn import(input: &str, output: &str, transform_config: Option<&str>) -> Result<(), Box<dyn Error>> {
     let bytes = fs::read(input)?;
     let source_name = Path::new(input)
         .file_name()
