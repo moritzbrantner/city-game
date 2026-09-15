@@ -5,11 +5,11 @@ use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{
     CityPlanningOverlay, CityRuleset, CityTimeConfig, CityTimeError, PopulationError,
-    PopulationRules, PopulationState, ProgressionState,
+    PopulationState, ProgressionState, RuleSystem, RulesetError,
 };
 
 pub const SCENARIO_SCHEMA_VERSION: u32 = 3;
-pub const SAVE_SCHEMA_VERSION: u32 = 5;
+pub const SAVE_SCHEMA_VERSION: u32 = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -164,6 +164,16 @@ pub struct CityScenario {
 }
 
 impl CityScenario {
+    pub fn validate_schema(&self) -> Result<(), CityScenarioError> {
+        if self.schema_version == SCENARIO_SCHEMA_VERSION {
+            Ok(())
+        } else {
+            Err(CityScenarioError::UnsupportedSchemaVersion(
+                self.schema_version,
+            ))
+        }
+    }
+
     pub fn contains_entity(&self, id: &str) -> bool {
         self.roads.iter().any(|entity| entity.id == id)
             || self.buildings.iter().any(|entity| entity.id == id)
@@ -172,6 +182,24 @@ impl CityScenario {
             || self.transit_anchors.iter().any(|entity| entity.id == id)
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CityScenarioError {
+    UnsupportedSchemaVersion(u32),
+}
+
+impl fmt::Display for CityScenarioError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedSchemaVersion(version) => write!(
+                formatter,
+                "unsupported city scenario schema version {version}; expected {SCENARIO_SCHEMA_VERSION}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CityScenarioError {}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -186,16 +214,17 @@ pub struct CityWorld {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitySave {
-    pub schema_version: u32,
-    pub scenario: CityScenario,
-    pub time: CityTimeConfig,
-    pub ruleset: CityRuleset,
-    pub population_rules: PopulationRules,
-    pub world: CityWorld,
+    pub(crate) schema_version: u32,
+    pub(crate) scenario: CityScenario,
+    pub(crate) time: CityTimeConfig,
+    pub(crate) ruleset: CityRuleset,
+    pub(crate) world: CityWorld,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CitySaveError {
+    Scenario(CityScenarioError),
+    Ruleset(RulesetError),
     Time(CityTimeError),
     Population(PopulationError),
 }
@@ -203,6 +232,8 @@ pub enum CitySaveError {
 impl fmt::Display for CitySaveError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Scenario(error) => error.fmt(formatter),
+            Self::Ruleset(error) => error.fmt(formatter),
             Self::Time(error) => error.fmt(formatter),
             Self::Population(error) => error.fmt(formatter),
         }
@@ -210,6 +241,18 @@ impl fmt::Display for CitySaveError {
 }
 
 impl std::error::Error for CitySaveError {}
+
+impl From<CityScenarioError> for CitySaveError {
+    fn from(error: CityScenarioError) -> Self {
+        Self::Scenario(error)
+    }
+}
+
+impl From<RulesetError> for CitySaveError {
+    fn from(error: RulesetError) -> Self {
+        Self::Ruleset(error)
+    }
+}
 
 impl From<CityTimeError> for CitySaveError {
     fn from(error: CityTimeError) -> Self {
@@ -228,11 +271,8 @@ impl From<PopulationError> for CitySaveError {
 struct CitySaveWire {
     schema_version: u32,
     scenario: CityScenario,
-    #[serde(default)]
     time: CityTimeConfig,
-    ruleset: Option<CityRuleset>,
-    #[serde(default)]
-    population_rules: PopulationRules,
+    ruleset: CityRuleset,
     world: CityWorld,
 }
 
@@ -242,48 +282,56 @@ impl<'de> Deserialize<'de> for CitySave {
         D: Deserializer<'de>,
     {
         let wire = CitySaveWire::deserialize(deserializer)?;
-        if wire.schema_version > SAVE_SCHEMA_VERSION {
+        if wire.schema_version != SAVE_SCHEMA_VERSION {
             return Err(D::Error::custom(format!(
-                "unsupported city save schema version {}",
+                "unsupported city save schema version {}; expected {SAVE_SCHEMA_VERSION}",
                 wire.schema_version
             )));
         }
-        let ruleset = match wire.ruleset {
-            Some(ruleset) => ruleset,
-            None if wire.schema_version < SAVE_SCHEMA_VERSION => CityRuleset::default(),
-            None => {
-                return Err(D::Error::custom(
-                    "city save schema version 5 requires an explicit ruleset",
-                ));
-            }
-        };
-        ruleset.validate().map_err(D::Error::custom)?;
         wire.world
             .planning
             .validate_against_scenario(&wire.scenario)
             .map_err(D::Error::custom)?;
 
-        Ok(Self {
-            schema_version: SAVE_SCHEMA_VERSION,
-            scenario: wire.scenario,
-            time: wire.time,
-            ruleset,
-            population_rules: wire.population_rules,
-            world: wire.world,
-        })
+        let mut save = Self::new_with_config(wire.scenario, wire.time, wire.ruleset)
+            .map_err(D::Error::custom)?;
+        save.world = wire.world;
+        Ok(save)
     }
 }
 
 impl CitySave {
-    pub fn new(scenario: CityScenario) -> Result<Self, PopulationError> {
-        let population_rules = PopulationRules::default();
-        let population = PopulationState::baseline_from_scenario(&scenario, population_rules)?;
+    pub fn new(scenario: CityScenario) -> Result<Self, CitySaveError> {
+        Self::new_with_config(scenario, CityTimeConfig::default(), CityRuleset::default())
+    }
+
+    pub fn new_with_ruleset(
+        scenario: CityScenario,
+        ruleset: CityRuleset,
+    ) -> Result<Self, CitySaveError> {
+        Self::new_with_config(scenario, CityTimeConfig::default(), ruleset)
+    }
+
+    pub fn new_with_config(
+        scenario: CityScenario,
+        time: CityTimeConfig,
+        ruleset: CityRuleset,
+    ) -> Result<Self, CitySaveError> {
+        scenario.validate_schema()?;
+        time.validate()?;
+        ruleset.validate()?;
+
+        let population = if ruleset.is_enabled(RuleSystem::Population) {
+            PopulationState::baseline_from_scenario(&scenario, ruleset.population.config)?
+        } else {
+            PopulationState::default()
+        };
+
         Ok(Self {
             schema_version: SAVE_SCHEMA_VERSION,
             scenario,
-            time: CityTimeConfig::default(),
-            ruleset: CityRuleset::default(),
-            population_rules,
+            time,
+            ruleset,
             world: CityWorld {
                 population,
                 ..CityWorld::default()
@@ -316,10 +364,30 @@ mod tests {
         }
     }
 
+    fn residential_building(id: &str, gross_floor_area_m2: u64) -> ScenarioBuilding {
+        ScenarioBuilding {
+            id: id.to_owned(),
+            source_id: id.to_owned(),
+            footprint: Geometry::Polygon {
+                coordinates: vec![vec![
+                    [8.0, 48.0],
+                    [8.001, 48.0],
+                    [8.001, 48.001],
+                    [8.0, 48.0],
+                ]],
+            },
+            use_kind: BuildingUse::Residential,
+            name: None,
+            levels: Some(1),
+            height_m: Some(3.0),
+            gross_floor_area_m2,
+        }
+    }
+
     #[test]
-    fn save_roundtrip_preserves_game_scenario_provenance_clock_ruleset_and_population_rules() {
+    fn save_roundtrip_preserves_current_scenario_clock_and_ruleset() {
         let mut save = CitySave::new(scenario()).unwrap();
-        save.advance_tick().unwrap();
+        save.advance_fixed_steps(1).unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
@@ -330,32 +398,70 @@ mod tests {
         assert_eq!(decoded.world.tick, 1);
         assert_eq!(decoded.time, CityTimeConfig::default());
         assert_eq!(decoded.ruleset, CityRuleset::default());
-        assert_eq!(decoded.population_rules, PopulationRules::default());
         assert_eq!(decoded.time_position().unwrap().minute_of_day, 15);
         assert!(!encoded.contains("\"tags\""));
     }
 
     #[test]
-    fn version_four_save_defaults_to_enabled_rules_and_migrates_on_load() {
+    fn non_current_save_schema_fails_instead_of_migrating() {
         let save = CitySave::new(scenario()).unwrap();
         let mut encoded = serde_json::to_value(save).unwrap();
-        encoded["schemaVersion"] = serde_json::json!(4);
-        encoded.as_object_mut().unwrap().remove("ruleset");
-
-        let decoded: CitySave = serde_json::from_value(encoded).unwrap();
-
-        assert_eq!(decoded.schema_version, SAVE_SCHEMA_VERSION);
-        assert_eq!(decoded.ruleset, CityRuleset::default());
-    }
-
-    #[test]
-    fn version_five_save_requires_explicit_ruleset() {
-        let save = CitySave::new(scenario()).unwrap();
-        let mut encoded = serde_json::to_value(save).unwrap();
-        encoded.as_object_mut().unwrap().remove("ruleset");
+        encoded["schemaVersion"] = serde_json::json!(SAVE_SCHEMA_VERSION - 1);
 
         let error = serde_json::from_value::<CitySave>(encoded).unwrap_err();
 
-        assert!(error.to_string().contains("requires an explicit ruleset"));
+        assert!(error.to_string().contains("unsupported city save schema"));
+    }
+
+    #[test]
+    fn non_current_scenario_schema_fails_instead_of_migrating() {
+        let mut invalid = scenario();
+        invalid.schema_version = SCENARIO_SCHEMA_VERSION - 1;
+
+        assert!(matches!(
+            CitySave::new(invalid),
+            Err(CitySaveError::Scenario(
+                CityScenarioError::UnsupportedSchemaVersion(_)
+            ))
+        ));
+    }
+
+    #[test]
+    fn custom_typed_rules_are_applied_when_a_save_is_created() {
+        let mut ruleset = CityRuleset::default();
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 72;
+
+        let save = CitySave::new_with_ruleset(scenario(), ruleset.clone()).unwrap();
+
+        assert_eq!(save.ruleset, ruleset);
+    }
+
+    #[test]
+    fn current_save_load_rejects_population_capacity_overflow() {
+        let mut overflowing_scenario = scenario();
+        overflowing_scenario.buildings = vec![
+            residential_building("residential/1", u64::MAX),
+            residential_building("residential/2", u64::MAX),
+        ];
+        let mut ruleset = CityRuleset::default();
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 1;
+        let invalid = CitySave {
+            schema_version: SAVE_SCHEMA_VERSION,
+            scenario: overflowing_scenario,
+            time: CityTimeConfig::default(),
+            ruleset,
+            world: CityWorld::default(),
+        };
+
+        let encoded = serde_json::to_string(&invalid).unwrap();
+        let error = serde_json::from_str::<CitySave>(&encoded).unwrap_err();
+
+        assert!(error.to_string().contains("population capacity overflow"));
     }
 }

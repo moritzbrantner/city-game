@@ -89,8 +89,7 @@ impl CitySave {
 #[cfg(test)]
 mod tests {
     use crate::{
-        CityScenario, ExternalRevision, PopulationRules, RuleStatus, SCENARIO_SCHEMA_VERSION,
-        ScenarioProvenance,
+        CityScenario, ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
     };
 
     use super::*;
@@ -132,14 +131,14 @@ mod tests {
     }
 
     #[test]
-    fn restart_does_not_require_population_rules_when_population_is_disabled() {
+    fn restart_does_not_seed_population_when_population_is_disabled() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Population, RuleStatus::Disabled);
-        save.population_rules = PopulationRules {
-            residential_floor_area_m2_per_household: 0,
-            ..PopulationRules::default()
-        };
+        save.ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 72;
         save.world.tick = 7;
 
         assert_eq!(
@@ -147,5 +146,12 @@ mod tests {
             CityCommandOutcome::Restarted
         );
         assert_eq!(save.world, CityWorld::default());
+        assert_eq!(
+            save.ruleset
+                .population
+                .config
+                .residential_floor_area_m2_per_household,
+            72
+        );
     }
 }

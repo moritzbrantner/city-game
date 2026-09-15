@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{CitySave, CitySaveError, CityScenario, CityWorld, RuleSystem};
+use crate::{CityRuleset, CitySave, CitySaveError, CityScenario, CityWorld};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
@@ -96,8 +96,6 @@ impl CityWorld {
             .ok_or(CityTimeError::TickOverflow)?;
         let final_position = time.position(final_tick)?;
 
-        // Keep an explicit fixed-step loop so future city systems can be inserted
-        // here without making wall-clock frame duration part of simulation semantics.
         for _ in 0..steps {
             self.tick += 1;
         }
@@ -112,10 +110,7 @@ impl CitySave {
         scenario: CityScenario,
         time: CityTimeConfig,
     ) -> Result<Self, CitySaveError> {
-        time.validate()?;
-        let mut save = Self::new(scenario)?;
-        save.time = time;
-        Ok(save)
+        Self::new_with_config(scenario, time, CityRuleset::default())
     }
 
     pub fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
@@ -127,16 +122,14 @@ impl CitySave {
     }
 
     pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
-        if self.ruleset.is_enabled(RuleSystem::Population) {
-            self.validate_population_configuration()?;
-        }
+        self.ruleset.validate()?;
         Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
+    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
 
     use super::*;
 
@@ -179,7 +172,7 @@ mod tests {
         let batch_position = batch.advance_fixed_steps(100).unwrap();
         let mut repeated_position = repeated.time_position().unwrap();
         for _ in 0..100 {
-            repeated_position = repeated.advance_tick().unwrap();
+            repeated_position = repeated.advance_fixed_steps(1).unwrap();
         }
 
         assert_eq!(batch, repeated);
@@ -227,24 +220,5 @@ mod tests {
             Err(CitySaveError::Time(CityTimeError::TickOverflow))
         );
         assert_eq!(overflow_save, before_overflow);
-    }
-
-    #[test]
-    fn disabled_population_does_not_gate_fixed_step_time() {
-        let mut save = CitySave::new(scenario()).unwrap();
-        save.ruleset
-            .set_status(RuleSystem::Population, RuleStatus::Disabled);
-        save.population_rules = serde_json::from_str(
-            r#"{
-                "residentialFloorAreaM2PerHousehold": 0,
-                "commercialFloorAreaM2PerJob": 0,
-                "industrialFloorAreaM2PerJob": 0,
-                "initialOccupancyBasisPoints": 10001,
-                "targetOccupancyBasisPoints": 10001
-            }"#,
-        )
-        .unwrap();
-
-        assert_eq!(save.advance_tick().unwrap().tick, 1);
     }
 }

@@ -95,7 +95,7 @@ impl CitySave {
             return Ok(Vec::new());
         }
 
-        let rules = self.ruleset.progression_rules.clone();
+        let rules = self.ruleset.progression.config.rules.clone();
         Ok(self.world.progression.evaluate(&rules, &self.world.metrics))
     }
 }
@@ -189,7 +189,7 @@ mod tests {
     fn save_progression_evaluation_uses_ruleset_and_world_metrics() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.world.metrics.insert("population".to_owned(), 1_000);
-        save.ruleset.progression_rules = vec![rule(
+        save.ruleset.progression.config.rules = vec![rule(
             "services",
             "basic-services",
             vec![Requirement::MetricAtLeast {
@@ -211,7 +211,8 @@ mod tests {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Progression, RuleStatus::Disabled);
-        save.ruleset.progression_rules = vec![rule("services", "basic-services", Vec::new())];
+        save.ruleset.progression.config.rules =
+            vec![rule("services", "basic-services", Vec::new())];
         let before = save.clone();
 
         assert!(save.evaluate_progression().unwrap().is_empty());

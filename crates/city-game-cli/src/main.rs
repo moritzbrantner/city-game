@@ -53,6 +53,7 @@ fn import(input: &str, output: &str) -> Result<(), Box<dyn Error>> {
 
 fn new_save(input: &str, output: &str, time: CityTimeConfig) -> Result<(), Box<dyn Error>> {
     let scenario: CityScenario = serde_json::from_slice(&fs::read(input)?)?;
+    scenario.validate_schema()?;
     let save = CitySave::new_with_time_config(scenario, time)?;
     write_json(output, &save)
 }
@@ -65,6 +66,7 @@ fn step_save(input: &str, output: &str, steps: u64) -> Result<(), Box<dyn Error>
 
 fn frame(input: &str, output: &str, aspect: f32) -> Result<(), Box<dyn Error>> {
     let scenario: CityScenario = serde_json::from_slice(&fs::read(input)?)?;
+    scenario.validate_schema()?;
     let frame = build_render_frame(&scenario, aspect)?;
     write_json(output, &frame)
 }

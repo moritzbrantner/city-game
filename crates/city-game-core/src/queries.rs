@@ -1,8 +1,9 @@
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use crate::{
-    CitySave, CityTimeError, CityTimePosition, EffectiveRoad, PopulationCapacity, PopulationError,
-    RciDemand, RuleStatus, RuleSystem,
+    CityPlanningOverlay, CityRuleset, CitySave, CityScenario, CityTimeError, CityTimePosition,
+    EffectiveRoad, PopulationCapacity, PopulationError, PopulationState, RciDemand, RuleStatus,
+    RuleSystem,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -41,6 +42,26 @@ impl CitySave {
 }
 
 impl CityQueries<'_> {
+    #[must_use]
+    pub fn scenario(&self) -> &CityScenario {
+        &self.save.scenario
+    }
+
+    #[must_use]
+    pub fn ruleset(&self) -> &CityRuleset {
+        &self.save.ruleset
+    }
+
+    #[must_use]
+    pub fn planning(&self) -> &CityPlanningOverlay {
+        &self.save.world.planning
+    }
+
+    #[must_use]
+    pub fn metrics(&self) -> &BTreeMap<String, i64> {
+        &self.save.world.metrics
+    }
+
     pub fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
         self.save.time_position()
     }
@@ -48,6 +69,11 @@ impl CityQueries<'_> {
     #[must_use]
     pub fn effective_roads(&self) -> Vec<EffectiveRoad> {
         self.save.effective_roads()
+    }
+
+    pub fn population_state(&self) -> Result<PopulationState, CityQueryError> {
+        self.require_enabled(RuleSystem::Population)?;
+        Ok(self.save.world.population)
     }
 
     pub fn developed_population_capacity(&self) -> Result<PopulationCapacity, CityQueryError> {
@@ -118,18 +144,29 @@ mod tests {
             Err(CityQueryError::SystemDisabled(RuleSystem::Population))
         );
         assert_eq!(
+            save.queries().population_state(),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Population))
+        );
+        assert_eq!(
             save.queries().rule_status(RuleSystem::Population),
             RuleStatus::Disabled
         );
     }
 
     #[test]
-    fn unrelated_queries_remain_available_when_population_is_disabled() {
+    fn immutable_configuration_and_unrelated_reads_remain_available() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Population, RuleStatus::Disabled);
 
         assert_eq!(save.queries().time_position().unwrap().tick, 0);
         assert!(save.queries().effective_roads().is_empty());
+        assert_eq!(save.queries().scenario().provenance.source_name, "queries");
+        assert_eq!(
+            save.queries().ruleset().population.status,
+            RuleStatus::Disabled
+        );
+        assert!(save.queries().planning().zones.is_empty());
+        assert!(save.queries().metrics().is_empty());
     }
 }
