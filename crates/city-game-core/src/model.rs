@@ -387,8 +387,7 @@ mod tests {
     #[test]
     fn save_roundtrip_preserves_current_scenario_clock_and_ruleset() {
         let mut save = CitySave::new(scenario()).unwrap();
-        save.execute(crate::CityCommand::AdvanceFixedSteps { steps: 1 })
-            .unwrap();
+        save.advance_fixed_steps(1).unwrap();
 
         let encoded = serde_json::to_string(&save).unwrap();
         let decoded: CitySave = serde_json::from_str(&encoded).unwrap();

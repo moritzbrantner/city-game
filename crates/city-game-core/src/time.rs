@@ -113,19 +113,16 @@ impl CitySave {
         Self::new_with_config(scenario, time, CityRuleset::default())
     }
 
-    pub(crate) fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
+    pub fn time_position(&self) -> Result<CityTimePosition, CityTimeError> {
         self.time.position(self.world.tick)
     }
 
-    #[cfg(test)]
-    pub(crate) fn advance_tick(&mut self) -> Result<CityTimePosition, CitySaveError> {
+    pub fn advance_tick(&mut self) -> Result<CityTimePosition, CitySaveError> {
         self.advance_fixed_steps(1)
     }
 
-    pub(crate) fn advance_fixed_steps(
-        &mut self,
-        steps: u64,
-    ) -> Result<CityTimePosition, CitySaveError> {
+    pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
+        self.ruleset.validate()?;
         Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
