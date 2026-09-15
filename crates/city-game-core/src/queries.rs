@@ -92,7 +92,7 @@ impl CitySave {
                 ruleset: queries.ruleset().clone(),
             }),
             CityQuery::Planning => Ok(CityQueryResult::Planning {
-                planning: queries.planning().clone(),
+                planning: queries.planning()?.clone(),
             }),
             CityQuery::Metrics => Ok(CityQueryResult::Metrics {
                 metrics: queries.metrics().clone(),
@@ -101,7 +101,7 @@ impl CitySave {
                 position: queries.time_position()?,
             }),
             CityQuery::EffectiveRoads => Ok(CityQueryResult::EffectiveRoads {
-                roads: queries.effective_roads(),
+                roads: queries.effective_roads()?,
             }),
             CityQuery::PopulationState => Ok(CityQueryResult::PopulationState {
                 state: queries.population_state()?,
@@ -118,7 +118,7 @@ impl CitySave {
                 status: queries.rule_status(system),
             }),
             CityQuery::SystemUnlocked { system } => Ok(CityQueryResult::SystemUnlocked {
-                unlocked: queries.system_unlocked(&system),
+                unlocked: queries.system_unlocked(&system)?,
             }),
         }
     }
@@ -135,9 +135,9 @@ impl CityQueries<'_> {
         &self.save.ruleset
     }
 
-    #[must_use]
-    pub fn planning(&self) -> &CityPlanningOverlay {
-        &self.save.world.planning
+    pub fn planning(&self) -> Result<&CityPlanningOverlay, CityQueryError> {
+        self.require_enabled(RuleSystem::Planning)?;
+        Ok(&self.save.world.planning)
     }
 
     #[must_use]
@@ -149,9 +149,9 @@ impl CityQueries<'_> {
         self.save.time_position()
     }
 
-    #[must_use]
-    pub fn effective_roads(&self) -> Vec<EffectiveRoad> {
-        self.save.effective_roads()
+    pub fn effective_roads(&self) -> Result<Vec<EffectiveRoad>, CityQueryError> {
+        self.require_enabled(RuleSystem::Planning)?;
+        Ok(self.save.effective_roads())
     }
 
     pub fn population_state(&self) -> Result<PopulationState, CityQueryError> {
@@ -174,9 +174,9 @@ impl CityQueries<'_> {
         self.save.ruleset.status(system)
     }
 
-    #[must_use]
-    pub fn system_unlocked(&self, system: &str) -> bool {
-        self.save.world.progression.unlocked.contains(system)
+    pub fn system_unlocked(&self, system: &str) -> Result<bool, CityQueryError> {
+        self.require_enabled(RuleSystem::Progression)?;
+        Ok(self.save.world.progression.unlocked.contains(system))
     }
 
     fn require_enabled(&self, system: RuleSystem) -> Result<(), CityQueryError> {
@@ -264,19 +264,43 @@ mod tests {
     }
 
     #[test]
+    fn disabled_planning_and_progression_are_explicit_on_read_side() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.ruleset
+            .set_status(RuleSystem::Planning, RuleStatus::Disabled);
+        save.ruleset
+            .set_status(RuleSystem::Progression, RuleStatus::Disabled);
+
+        assert_eq!(
+            save.queries().planning(),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Planning))
+        );
+        assert_eq!(
+            save.query(CityQuery::EffectiveRoads),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Planning))
+        );
+        assert_eq!(
+            save.query(CityQuery::SystemUnlocked {
+                system: "basic-services".to_owned(),
+            }),
+            Err(CityQueryError::SystemDisabled(RuleSystem::Progression))
+        );
+    }
+
+    #[test]
     fn immutable_configuration_and_unrelated_reads_remain_available() {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Population, RuleStatus::Disabled);
 
         assert_eq!(save.queries().time_position().unwrap().tick, 0);
-        assert!(save.queries().effective_roads().is_empty());
+        assert!(save.queries().effective_roads().unwrap().is_empty());
         assert_eq!(save.queries().scenario().provenance.source_name, "queries");
         assert_eq!(
             save.queries().ruleset().population.status,
             RuleStatus::Disabled
         );
-        assert!(save.queries().planning().zones.is_empty());
+        assert!(save.queries().planning().unwrap().zones.is_empty());
         assert!(save.queries().metrics().is_empty());
     }
 }

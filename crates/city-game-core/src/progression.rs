@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::{CitySave, RuleSystem, RulesetError};
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum Requirement {
@@ -82,8 +84,28 @@ impl ProgressionState {
     }
 }
 
+impl CitySave {
+    /// Runs the progression simulation system directly against authoritative city state.
+    ///
+    /// Progression is an internal deterministic system, not an application command. A disabled
+    /// progression system is therefore skipped rather than rejected as invalid player intent.
+    pub fn evaluate_progression(&mut self) -> Result<Vec<String>, RulesetError> {
+        self.ruleset.validate()?;
+        if !self.ruleset.is_enabled(RuleSystem::Progression) {
+            return Ok(Vec::new());
+        }
+
+        let rules = self.ruleset.progression.config.rules.clone();
+        Ok(self.world.progression.evaluate(&rules, &self.world.metrics))
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::{
+        CityScenario, ExternalRevision, RuleStatus, SCENARIO_SCHEMA_VERSION, ScenarioProvenance,
+    };
+
     use super::*;
 
     fn rule(id: &str, unlocks: &str, all: Vec<Requirement>) -> ProgressionRule {
@@ -91,6 +113,26 @@ mod tests {
             id: id.to_owned(),
             unlocks: unlocks.to_owned(),
             all,
+        }
+    }
+
+    fn scenario() -> CityScenario {
+        CityScenario {
+            schema_version: SCENARIO_SCHEMA_VERSION,
+            provenance: ScenarioProvenance {
+                source_format: "fixture".to_owned(),
+                source_name: "progression".to_owned(),
+                source_sha256: "progression".to_owned(),
+                parser: ExternalRevision {
+                    repository: "fixture".to_owned(),
+                    revision: "fixture".to_owned(),
+                },
+            },
+            roads: Vec::new(),
+            buildings: Vec::new(),
+            water: Vec::new(),
+            land_use_areas: Vec::new(),
+            transit_anchors: Vec::new(),
         }
     }
 
@@ -141,5 +183,39 @@ mod tests {
 
         assert!(state.evaluate(&rules, &metrics).is_empty());
         assert!(!state.unlocked.contains("waste-management"));
+    }
+
+    #[test]
+    fn save_progression_evaluation_uses_ruleset_and_world_metrics() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.world.metrics.insert("population".to_owned(), 1_000);
+        save.ruleset.progression.config.rules = vec![rule(
+            "services",
+            "basic-services",
+            vec![Requirement::MetricAtLeast {
+                metric: "population".to_owned(),
+                value: 1_000,
+            }],
+        )];
+
+        assert_eq!(
+            save.evaluate_progression().unwrap(),
+            vec!["basic-services".to_owned()]
+        );
+        assert!(save.world.progression.unlocked.contains("basic-services"));
+        assert!(save.evaluate_progression().unwrap().is_empty());
+    }
+
+    #[test]
+    fn disabled_progression_is_a_simulation_noop() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.ruleset
+            .set_status(RuleSystem::Progression, RuleStatus::Disabled);
+        save.ruleset.progression.config.rules =
+            vec![rule("services", "basic-services", Vec::new())];
+        let before = save.clone();
+
+        assert!(save.evaluate_progression().unwrap().is_empty());
+        assert_eq!(save, before);
     }
 }
