@@ -211,7 +211,8 @@ mod tests {
         let mut save = CitySave::new(scenario()).unwrap();
         save.ruleset
             .set_status(RuleSystem::Progression, RuleStatus::Disabled);
-        save.ruleset.progression.config.rules = vec![rule("services", "basic-services", Vec::new())];
+        save.ruleset.progression.config.rules =
+            vec![rule("services", "basic-services", Vec::new())];
         let before = save.clone();
 
         assert!(save.evaluate_progression().unwrap().is_empty());
