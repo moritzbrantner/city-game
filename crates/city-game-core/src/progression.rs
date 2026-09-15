@@ -96,10 +96,7 @@ impl CitySave {
         }
 
         let rules = self.ruleset.progression.config.rules.clone();
-        Ok(self
-            .world
-            .progression
-            .evaluate(&rules, &self.world.metrics))
+        Ok(self.world.progression.evaluate(&rules, &self.world.metrics))
     }
 }
 
