@@ -7,8 +7,7 @@ use crate::{CityScenario, ExternalRevision, RoadClass, ScenarioProvenance};
 
 pub const OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION: u32 = 1;
 pub const OSM_SCENARIO_IMPORT_RECEIPT_SCHEMA_VERSION: u32 = 1;
-pub const OSM_SCENARIO_TRANSFORMER_REPOSITORY: &str =
-    "https://github.com/moritzbrantner/city-game";
+pub const OSM_SCENARIO_TRANSFORMER_REPOSITORY: &str = "https://github.com/moritzbrantner/city-game";
 pub const OSM_SCENARIO_TRANSFORMER_REVISION: &str = "osm-scenario-transform-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -252,7 +251,10 @@ impl fmt::Display for OsmScenarioTransformError {
                 )
             }
             Self::Serialization(error) => {
-                write!(formatter, "failed to serialize OSM transform evidence: {error}")
+                write!(
+                    formatter,
+                    "failed to serialize OSM transform evidence: {error}"
+                )
             }
         }
     }
@@ -395,10 +397,8 @@ mod tests {
     #[test]
     fn import_receipts_are_deterministic_and_bind_source_config_and_output() {
         let config = OsmScenarioTransformConfig::road_layout_only();
-        let (first_scenario, first_receipt) =
-            config.transform_with_receipt(scenario()).unwrap();
-        let (second_scenario, second_receipt) =
-            config.transform_with_receipt(scenario()).unwrap();
+        let (first_scenario, first_receipt) = config.transform_with_receipt(scenario()).unwrap();
+        let (second_scenario, second_receipt) = config.transform_with_receipt(scenario()).unwrap();
 
         assert_eq!(first_scenario, second_scenario);
         assert_eq!(first_receipt, second_receipt);
@@ -420,7 +420,10 @@ mod tests {
             OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION
         );
         assert_eq!(first_receipt.transform_sha256.len(), 64);
-        assert_eq!(first_receipt.scenario_schema_version, SCENARIO_SCHEMA_VERSION);
+        assert_eq!(
+            first_receipt.scenario_schema_version,
+            SCENARIO_SCHEMA_VERSION
+        );
         assert_eq!(first_receipt.scenario_sha256.len(), 64);
     }
 
@@ -434,8 +437,14 @@ mod tests {
         changed.roads.preserve_names = true;
         let (_, changed_receipt) = changed.transform_with_receipt(base).unwrap();
 
-        assert_ne!(first_receipt.transform_sha256, changed_receipt.transform_sha256);
-        assert_ne!(first_receipt.scenario_sha256, changed_receipt.scenario_sha256);
+        assert_ne!(
+            first_receipt.transform_sha256,
+            changed_receipt.transform_sha256
+        );
+        assert_ne!(
+            first_receipt.scenario_sha256,
+            changed_receipt.scenario_sha256
+        );
     }
 
     #[test]
