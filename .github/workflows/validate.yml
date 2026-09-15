@@ -23,6 +23,7 @@ jobs:
         with:
           toolchain: 1.98.0
           components: clippy,rustfmt
+          targets: wasm32-unknown-unknown
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -37,6 +38,9 @@ jobs:
 
       - name: Test Rust with locked dependencies
         run: cargo test --locked --workspace --all-features
+
+      - name: Check browser WASM target
+        run: cargo check --locked -p city-game-core --target wasm32-unknown-unknown
 
       - name: Build deployable browser proof
         run: bash scripts/build-pages.sh

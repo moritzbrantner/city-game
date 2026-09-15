@@ -11,6 +11,7 @@ python3 - <<'PY'
 import json
 import pathlib
 import re
+import shutil
 import subprocess
 
 manifest_path = pathlib.Path("fixtures/pages/manifest.json")
@@ -28,13 +29,18 @@ for scenario in manifest.get("scenarios", []):
     scenario_path = pathlib.Path(scenario["scenarioPath"])
     if not scenario_path.is_file():
         raise SystemExit(f"missing Pages scenario: {scenario_path}")
-    output_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}.json"
+
+    public_scenario_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-scenario.json"
+    frame_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-frame.json"
+    shutil.copyfile(scenario_path, public_scenario_path)
     subprocess.run(
-        ["cargo", "run", "--locked", "-p", "city-game-cli", "--", "frame", str(scenario_path), str(output_path)],
+        ["cargo", "run", "--locked", "-p", "city-game-cli", "--", "frame", str(scenario_path), str(frame_path)],
         check=True,
     )
+
     public = {key: value for key, value in scenario.items() if key != "scenarioPath"}
-    public["frame"] = f"./scenarios/{scenario_id}.json"
+    public["scenario"] = f"./scenarios/{scenario_id}-scenario.json"
+    public["frame"] = f"./scenarios/{scenario_id}-frame.json"
     public_scenarios.append(public)
 
 if len(public_scenarios) < 3:
@@ -44,13 +50,16 @@ pathlib.Path("web/public/scenarios.json").write_text(
 )
 PY
 
+cargo build --locked --release -p city-game-core --target wasm32-unknown-unknown
+cp target/wasm32-unknown-unknown/release/city_game_core.wasm web/public/city-game-core.wasm
+
 (
   cd web
   bun install --frozen-lockfile
   bun run build
 )
 
-for asset in index.html main.js style.css scenarios.json; do
+for asset in index.html main.js style.css scenarios.json city-game-core.wasm; do
   test -s "web/dist/$asset" || {
     echo "missing Pages artifact: web/dist/$asset" >&2
     exit 1
@@ -66,11 +75,13 @@ scenarios = manifest.get("scenarios", [])
 if len(scenarios) < 3:
     raise SystemExit("built Pages artifact exposes fewer than three example cities")
 for scenario in scenarios:
-    frame = scenario.get("frame", "").removeprefix("./")
-    if not frame or not (pathlib.Path("web/dist") / frame).is_file():
-        raise SystemExit(f"missing generated frame for {scenario.get('id')}")
+    for key in ("scenario", "frame"):
+        asset = scenario.get(key, "").removeprefix("./")
+        if not asset or not (pathlib.Path("web/dist") / asset).is_file():
+            raise SystemExit(f"missing {key} asset for {scenario.get('id')}")
 PY
 
 grep -F 'href="./style.css"' web/dist/index.html >/dev/null
 grep -F 'src="./main.js"' web/dist/index.html >/dev/null
 grep -F 'scenarios.json' web/dist/main.js >/dev/null
+grep -F 'city-game-core.wasm' web/dist/main.js >/dev/null
