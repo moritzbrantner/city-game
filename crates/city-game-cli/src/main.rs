@@ -13,9 +13,12 @@ const DEFAULT_FRAME_ASPECT: f32 = 16.0 / 9.0;
 fn main() -> Result<(), Box<dyn Error>> {
     let args = env::args().collect::<Vec<_>>();
     match args.as_slice() {
-        [_, command, input, output] if command == "import" => import(input, output, None),
+        [_, command, input, output] if command == "import" => import(input, output, None, None),
         [_, command, input, output, transform_config] if command == "import" => {
-            import(input, output, Some(transform_config))
+            import(input, output, Some(transform_config), None)
+        }
+        [_, command, input, output, transform_config, receipt] if command == "import" => {
+            import(input, output, Some(transform_config), Some(receipt))
         }
         [_, command, input, output] if command == "new-save" => {
             new_save(input, output, CityTimeConfig::default())
@@ -41,7 +44,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         _ => {
             eprintln!("usage:");
             eprintln!(
-                "  city-game-cli import <input.osm.pbf> <scenario.json> [transform-config.json]"
+                "  city-game-cli import <input.osm.pbf> <scenario.json> [transform-config.json] [receipt.json]"
             );
             eprintln!("  city-game-cli new-save <scenario.json> <save.json> [minutes-per-tick]");
             eprintln!("  city-game-cli step <save.json> <output-save.json> <steps>");
@@ -55,7 +58,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-fn import(input: &str, output: &str, transform_config: Option<&str>) -> Result<(), Box<dyn Error>> {
+fn import(
+    input: &str,
+    output: &str,
+    transform_config: Option<&str>,
+    receipt_output: Option<&str>,
+) -> Result<(), Box<dyn Error>> {
     let bytes = fs::read(input)?;
     let source_name = Path::new(input)
         .file_name()
@@ -65,7 +73,14 @@ fn import(input: &str, output: &str, transform_config: Option<&str>) -> Result<(
     let scenario = match transform_config {
         Some(path) => {
             let config: OsmScenarioTransformConfig = read_json(path)?;
-            config.transform(scenario)?
+            match receipt_output {
+                Some(receipt_path) => {
+                    let (scenario, receipt) = config.transform_with_receipt(scenario)?;
+                    write_json(receipt_path, &receipt)?;
+                    scenario
+                }
+                None => config.transform(scenario)?,
+            }
         }
         None => scenario,
     };
