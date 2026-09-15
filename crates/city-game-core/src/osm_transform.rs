@@ -1,10 +1,15 @@
-use std::{collections::BTreeSet, fmt};
+use std::{collections::BTreeSet, fmt, fmt::Write as _};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::{CityScenario, RoadClass};
+use crate::{CityScenario, ExternalRevision, RoadClass, ScenarioProvenance};
 
 pub const OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION: u32 = 1;
+pub const OSM_SCENARIO_IMPORT_RECEIPT_SCHEMA_VERSION: u32 = 1;
+pub const OSM_SCENARIO_TRANSFORMER_REPOSITORY: &str =
+    "https://github.com/moritzbrantner/city-game";
+pub const OSM_SCENARIO_TRANSFORMER_REVISION: &str = "osm-scenario-transform-v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +51,18 @@ pub struct OsmScenarioTransformConfig {
     pub water: OsmFeatureTransformPolicy,
     pub land_use: OsmFeatureTransformPolicy,
     pub transit: OsmFeatureTransformPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OsmScenarioImportReceipt {
+    pub schema_version: u32,
+    pub source: ScenarioProvenance,
+    pub transformer: ExternalRevision,
+    pub transform_schema_version: u32,
+    pub transform_sha256: String,
+    pub scenario_schema_version: u32,
+    pub scenario_sha256: String,
 }
 
 impl Default for OsmScenarioTransformConfig {
@@ -130,10 +147,37 @@ impl OsmScenarioTransformConfig {
 
     pub fn transform(
         &self,
-        mut scenario: CityScenario,
+        scenario: CityScenario,
     ) -> Result<CityScenario, OsmScenarioTransformError> {
         self.validate()?;
+        Ok(self.transform_validated(scenario))
+    }
 
+    pub fn transform_with_receipt(
+        &self,
+        scenario: CityScenario,
+    ) -> Result<(CityScenario, OsmScenarioImportReceipt), OsmScenarioTransformError> {
+        self.validate()?;
+        let source = scenario.provenance.clone();
+        let transform_sha256 = serialized_sha256(self)?;
+        let scenario = self.transform_validated(scenario);
+        let scenario_sha256 = serialized_sha256(&scenario)?;
+        let receipt = OsmScenarioImportReceipt {
+            schema_version: OSM_SCENARIO_IMPORT_RECEIPT_SCHEMA_VERSION,
+            source,
+            transformer: ExternalRevision {
+                repository: OSM_SCENARIO_TRANSFORMER_REPOSITORY.to_owned(),
+                revision: OSM_SCENARIO_TRANSFORMER_REVISION.to_owned(),
+            },
+            transform_schema_version: self.schema_version,
+            transform_sha256,
+            scenario_schema_version: scenario.schema_version,
+            scenario_sha256,
+        };
+        Ok((scenario, receipt))
+    }
+
+    fn transform_validated(&self, mut scenario: CityScenario) -> CityScenario {
         scenario.roads = scenario
             .roads
             .into_iter()
@@ -176,15 +220,16 @@ impl OsmScenarioTransformConfig {
             scenario.transit_anchors.clear();
         }
 
-        Ok(scenario)
+        scenario
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OsmScenarioTransformError {
     UnsupportedSchemaVersion(u32),
     EmptyRoadMapping(usize),
     DuplicateRoadSource(RoadClass),
+    Serialization(String),
 }
 
 impl fmt::Display for OsmScenarioTransformError {
@@ -206,11 +251,25 @@ impl fmt::Display for OsmScenarioTransformError {
                     "OSM road class {source:?} is mapped more than once"
                 )
             }
+            Self::Serialization(error) => {
+                write!(formatter, "failed to serialize OSM transform evidence: {error}")
+            }
         }
     }
 }
 
 impl std::error::Error for OsmScenarioTransformError {}
+
+fn serialized_sha256(value: &impl Serialize) -> Result<String, OsmScenarioTransformError> {
+    let bytes = serde_json::to_vec(value)
+        .map_err(|error| OsmScenarioTransformError::Serialization(error.to_string()))?;
+    let digest = Sha256::digest(bytes);
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        write!(&mut encoded, "{byte:02x}").expect("writing to String cannot fail");
+    }
+    Ok(encoded)
+}
 
 #[cfg(test)]
 mod tests {
@@ -331,6 +390,52 @@ mod tests {
             .unwrap();
 
         assert_eq!(transformed, original);
+    }
+
+    #[test]
+    fn import_receipts_are_deterministic_and_bind_source_config_and_output() {
+        let config = OsmScenarioTransformConfig::road_layout_only();
+        let (first_scenario, first_receipt) =
+            config.transform_with_receipt(scenario()).unwrap();
+        let (second_scenario, second_receipt) =
+            config.transform_with_receipt(scenario()).unwrap();
+
+        assert_eq!(first_scenario, second_scenario);
+        assert_eq!(first_receipt, second_receipt);
+        assert_eq!(
+            first_receipt.schema_version,
+            OSM_SCENARIO_IMPORT_RECEIPT_SCHEMA_VERSION
+        );
+        assert_eq!(first_receipt.source.source_sha256, "fixture");
+        assert_eq!(
+            first_receipt.transformer.repository,
+            OSM_SCENARIO_TRANSFORMER_REPOSITORY
+        );
+        assert_eq!(
+            first_receipt.transformer.revision,
+            OSM_SCENARIO_TRANSFORMER_REVISION
+        );
+        assert_eq!(
+            first_receipt.transform_schema_version,
+            OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION
+        );
+        assert_eq!(first_receipt.transform_sha256.len(), 64);
+        assert_eq!(first_receipt.scenario_schema_version, SCENARIO_SCHEMA_VERSION);
+        assert_eq!(first_receipt.scenario_sha256.len(), 64);
+    }
+
+    #[test]
+    fn changing_transform_config_changes_receipt_identity() {
+        let base = scenario();
+        let config = OsmScenarioTransformConfig::road_layout_only();
+        let (_, first_receipt) = config.transform_with_receipt(base.clone()).unwrap();
+
+        let mut changed = config;
+        changed.roads.preserve_names = true;
+        let (_, changed_receipt) = changed.transform_with_receipt(base).unwrap();
+
+        assert_ne!(first_receipt.transform_sha256, changed_receipt.transform_sha256);
+        assert_ne!(first_receipt.scenario_sha256, changed_receipt.scenario_sha256);
     }
 
     #[test]
