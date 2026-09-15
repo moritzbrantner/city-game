@@ -11,6 +11,8 @@ mod commands;
 mod model;
 #[cfg(not(target_arch = "wasm32"))]
 mod osm;
+#[cfg(not(target_arch = "wasm32"))]
+mod osm_transform;
 mod planning;
 mod population;
 mod progression;
@@ -30,6 +32,12 @@ pub use model::{
 };
 #[cfg(not(target_arch = "wasm32"))]
 pub use osm::{GEO_ANALYSIS_REVISION, OSM_PARSER_REPOSITORY, import_osm_pbf_bytes};
+#[cfg(not(target_arch = "wasm32"))]
+pub use osm_transform::{
+    OSM_SCENARIO_TRANSFORM_SCHEMA_VERSION, OsmFeatureTransformPolicy, OsmRoadClassMapping,
+    OsmRoadTransformConfig, OsmScenarioTransformConfig, OsmScenarioTransformError,
+    OsmUnmappedRoadPolicy,
+};
 pub use planning::{
     CityPlanningOverlay, EffectiveRoad, EffectiveRoadOrigin, PlannedRoad, PlannedZone,
     PlanningCommand, PlanningError, PlanningOutcome, ZoneKind,
