@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "roads": {
+    "mappings": [
+      {
+        "sources": ["motorway", "trunk", "primary"],
+        "target": "primary"
+      },
+      {
+        "sources": ["secondary", "tertiary"],
+        "target": "secondary"
+      },
+      {
+        "sources": ["residential", "service"],
+        "target": "residential"
+      }
+    ],
+    "unmapped": "ignore",
+    "preserveNames": false,
+    "preserveLanes": false,
+    "preserveMaxSpeed": false
+  },
+  "buildings": "ignore",
+  "water": "ignore",
+  "landUse": "ignore",
+  "transit": "ignore"
+}
