@@ -9,9 +9,17 @@
 5. Keep scenario normalization, simulation, aggregate population/jobs, progression rules, planning overlays, city time, save state, economy, services, zoning, and city-specific rendering policy in `city-game-core`.
 6. Before adding local ECS, physics, asset-pipeline, multiplayer/session, pathfinding, or generic spatial infrastructure, inspect the corresponding shared repositories and integrate through an adapter when mature enough.
 
+## Application and simulation boundary
+
+- Use lightweight CQS/CQRS for application and player intent, not as the internal architecture of the simulation engine.
+- `CityCommand` represents semantic player/application mutations such as planning changes or restarting a scenario. Do not route fixed-step advancement, progression evaluation, economy ticks, service updates, AI, pathfinding, ECS systems, physics, or other simulation mechanics through the command gateway.
+- Simulation systems are direct deterministic `city-game-core` operations coordinated by authoritative fixed-step simulation. Their behavior must remain equivalent for batched versus repeated single steps where applicable.
+- Queries may provide read-oriented shapes over authoritative state, but do not add asynchronous projections, a separate read store, messaging, or event sourcing without a concrete requirement that justifies their consistency and operational cost.
+- Keep command handlers thin: validate application intent and delegate domain rules to their authoritative core systems rather than duplicating business logic in transport/UI layers.
+
 ## CQRS and rules boundary
 
-- Application writes enter through `CitySave::execute(CityCommand)`. Do not expose parallel public mutation helpers or public mutable save/world fields that allow callers to bypass command validation.
+- Application/player mutations enter through `CitySave::execute(CityCommand)`. Do not expose parallel public mutation helpers or public mutable save/world fields that allow callers to bypass command validation. Internal deterministic simulation operations are not application commands.
 - Application reads go through `CitySave::queries()` or other explicitly read-only projections. Query code must not mutate authoritative game state.
 - CQRS is an in-process domain boundary. Do not add an event store, replay log, or event-sourcing infrastructure unless a later requirement explicitly justifies it.
 - `CityWorld` is authoritative mutable simulation state. Persistence stores current state rather than reconstructing it from events.
@@ -59,7 +67,7 @@ Progression is rule/data driven. UI code may explain unlocks but must not decide
 
 - A GitHub Pages version is a required `city-game` delivery surface, not an optional documentation demo.
 - `web/` is the canonical browser application. Do not create a parallel Pages-only implementation or duplicate simulation rules in browser code.
-- Browser interaction that changes game state must cross the same `CityCommand` boundary used by other application adapters; do not reimplement planning/rule decisions in JavaScript.
+- Browser player intent that changes game state must cross the same `CityCommand` boundary used by other application adapters; do not reimplement planning/rule decisions in JavaScript. Internal simulation stepping remains a Rust simulation operation rather than a synthetic command.
 - Build the Pages artifact through `scripts/build-pages.sh`; it must regenerate game-owned renderer data through the canonical Rust CLI and use frozen browser dependencies.
 - Keep project-site assets relative so the same artifact works at `/city-game/` without repository-name logic in simulation or rendering code.
 - Deployment must consume an exact-source, verified build artifact. Do not silently rebuild a different artifact in the deploy job.
