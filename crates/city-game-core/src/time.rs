@@ -123,13 +123,21 @@ impl CitySave {
 
     pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
         self.ruleset.validate()?;
+        if self.ruleset.population.is_enabled() {
+            self.developed_population_capacity()?;
+        }
         Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioProvenance};
+    use geo_core::Geometry;
+
+    use crate::{
+        BuildingUse, ExternalRevision, PopulationError, SCENARIO_SCHEMA_VERSION, ScenarioBuilding,
+        ScenarioProvenance,
+    };
 
     use super::*;
 
@@ -150,6 +158,26 @@ mod tests {
             water: Vec::new(),
             land_use_areas: Vec::new(),
             transit_anchors: Vec::new(),
+        }
+    }
+
+    fn residential_building(id: &str, gross_floor_area_m2: u64) -> ScenarioBuilding {
+        ScenarioBuilding {
+            id: id.to_owned(),
+            source_id: id.to_owned(),
+            footprint: Geometry::Polygon {
+                coordinates: vec![vec![
+                    [8.0, 48.0],
+                    [8.001, 48.0],
+                    [8.001, 48.001],
+                    [8.0, 48.0],
+                ]],
+            },
+            use_kind: BuildingUse::Residential,
+            name: None,
+            levels: Some(1),
+            height_m: Some(3.0),
+            gross_floor_area_m2,
         }
     }
 
@@ -220,5 +248,25 @@ mod tests {
             Err(CitySaveError::Time(CityTimeError::TickOverflow))
         );
         assert_eq!(overflow_save, before_overflow);
+    }
+
+    #[test]
+    fn population_capacity_overflow_fails_before_tick_mutation() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.scenario.buildings = vec![
+            residential_building("residential/1", u64::MAX),
+            residential_building("residential/2", u64::MAX),
+        ];
+        save.ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 1;
+        let before = save.clone();
+
+        assert_eq!(
+            save.advance_fixed_steps(1),
+            Err(CitySaveError::Population(PopulationError::CapacityOverflow))
+        );
+        assert_eq!(save, before);
     }
 }
