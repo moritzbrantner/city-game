@@ -51,11 +51,7 @@ pub(crate) fn render_frame_json(save_json: &str, aspect: f32) -> String {
     })())
 }
 
-pub(crate) fn render_frame_with_view_json(
-    save_json: &str,
-    view_json: &str,
-    aspect: f32,
-) -> String {
+pub(crate) fn render_frame_with_view_json(save_json: &str, view_json: &str, aspect: f32) -> String {
     encode_result((|| {
         let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
         let view: RenderView =
