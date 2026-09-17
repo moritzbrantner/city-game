@@ -63,7 +63,51 @@ cp target/wasm32-unknown-unknown/release/city_game_core.wasm web/public/city-gam
   bun run build
 )
 
-for asset in index.html main.js surface.js style.css scenarios.json city-game-core.wasm; do
+python3 - <<'PY'
+import html
+import json
+import pathlib
+
+manifest = json.loads(pathlib.Path("web/dist/scenarios.json").read_text())
+template_path = pathlib.Path("web/dist/index.html")
+template = template_path.read_text()
+route_script = '    <script type="module" src="./route.js"></script>'
+if route_script not in template:
+    raise SystemExit("Pages template is missing the route bootstrap")
+
+for scenario in manifest.get("scenarios", []):
+    scenario_id = scenario["id"]
+    scenario_name = scenario["name"]
+    description = scenario.get("description", "")
+    page = template.replace(
+        "<head>",
+        '<head>\n    <base href="../../" />\n'
+        f'    <meta name="description" content="{html.escape(description, quote=True)}" />\n'
+        f'    <link rel="canonical" href="./scenarios/{scenario_id}/" />',
+        1,
+    )
+    page = page.replace(
+        "<title>city-game</title>",
+        f"<title>{html.escape(scenario_name)} · city-game</title>",
+        1,
+    )
+    bootstrap = (
+        "    <script>\n"
+        "      (() => {\n"
+        "        const url = new URL(window.location.href);\n"
+        f"        url.searchParams.set(\"scenario\", {json.dumps(scenario_id)});\n"
+        "        url.searchParams.set(\"mode\", \"city\");\n"
+        "        history.replaceState(null, \"\", url);\n"
+        "      })();\n"
+        "    </script>\n"
+    )
+    page = page.replace(route_script, bootstrap + route_script, 1)
+    output = pathlib.Path("web/dist/scenarios") / scenario_id / "index.html"
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(page)
+PY
+
+for asset in index.html main.js route.js surface.js style.css enhancements.css scenarios.json city-game-core.wasm; do
   test -s "web/dist/$asset" || {
     echo "missing Pages artifact: web/dist/$asset" >&2
     exit 1
@@ -83,11 +127,24 @@ for scenario in scenarios:
         asset = scenario.get(key, "").removeprefix("./")
         if not asset or not (pathlib.Path("web/dist") / asset).is_file():
             raise SystemExit(f"missing {key} asset for {scenario.get('id')}")
+
+    scenario_id = scenario.get("id", "")
+    page_path = pathlib.Path("web/dist/scenarios") / scenario_id / "index.html"
+    if not page_path.is_file():
+        raise SystemExit(f"missing dedicated scenario page for {scenario_id}")
+    page = page_path.read_text()
+    expected = f'url.searchParams.set("scenario", "{scenario_id}")'
+    for marker in ('<base href="../../" />', expected, 'url.searchParams.set("mode", "city")'):
+        if marker not in page:
+            raise SystemExit(f"scenario page for {scenario_id} is missing {marker}")
 PY
 
 grep -F 'href="./style.css"' web/dist/index.html >/dev/null
+grep -F 'href="./enhancements.css"' web/dist/index.html >/dev/null
+grep -F 'src="./route.js"' web/dist/index.html >/dev/null
 grep -F 'src="./surface.js"' web/dist/index.html >/dev/null
 grep -F 'src="./main.js"' web/dist/index.html >/dev/null
+grep -F 'scenarioRoutePrefix' web/dist/route.js >/dev/null
 grep -F 'scenarios.json' web/dist/main.js >/dev/null
 grep -F 'city-game-core.wasm' web/dist/main.js >/dev/null
 grep -F '@moritzbrantner/settings-browser' web/dist/index.html >/dev/null
