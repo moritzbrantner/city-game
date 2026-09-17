@@ -4,6 +4,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+python3 scripts/refresh-pages-osm.py --verify
+
 rm -rf web/dist web/public/scenarios
 mkdir -p web/public/scenarios
 
@@ -11,7 +13,6 @@ python3 - <<'PY'
 import json
 import pathlib
 import re
-import shutil
 import subprocess
 
 manifest_path = pathlib.Path("fixtures/pages/manifest.json")
@@ -32,11 +33,14 @@ for scenario in manifest.get("scenarios", []):
 
     public_scenario_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-scenario.json"
     frame_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-frame.json"
-    shutil.copyfile(scenario_path, public_scenario_path)
+    scenario_document = json.loads(scenario_path.read_text())
+    public_scenario_path.write_text(json.dumps(scenario_document, separators=(",", ":")) + "\n")
     subprocess.run(
         ["cargo", "run", "--locked", "-p", "city-game-cli", "--", "frame", str(scenario_path), str(frame_path)],
         check=True,
     )
+    frame_document = json.loads(frame_path.read_text())
+    frame_path.write_text(json.dumps(frame_document, separators=(",", ":")) + "\n")
 
     public = {key: value for key, value in scenario.items() if key != "scenarioPath"}
     public["scenario"] = f"./scenarios/{scenario_id}-scenario.json"
@@ -59,7 +63,7 @@ cp target/wasm32-unknown-unknown/release/city_game_core.wasm web/public/city-gam
   bun run build
 )
 
-for asset in index.html main.js style.css scenarios.json city-game-core.wasm; do
+for asset in index.html main.js surface.js style.css scenarios.json city-game-core.wasm; do
   test -s "web/dist/$asset" || {
     echo "missing Pages artifact: web/dist/$asset" >&2
     exit 1
@@ -82,6 +86,7 @@ for scenario in scenarios:
 PY
 
 grep -F 'href="./style.css"' web/dist/index.html >/dev/null
+grep -F 'src="./surface.js"' web/dist/index.html >/dev/null
 grep -F 'src="./main.js"' web/dist/index.html >/dev/null
 grep -F 'scenarios.json' web/dist/main.js >/dev/null
 grep -F 'city-game-core.wasm' web/dist/main.js >/dev/null
@@ -90,5 +95,7 @@ grep -F '@moritzbrantner/input-bindings-browser' web/dist/index.html >/dev/null
 grep -F 'appearance.color_scheme' web/dist/main.js >/dev/null
 grep -F 'city.view.overview' web/dist/main.js >/dev/null
 grep -F 'city.view.zoomIn' web/dist/main.js >/dev/null
+grep -F 'Shift + drag to move' web/dist/main.js >/dev/null
 grep -F 'Focus selected' web/dist/index.html >/dev/null
 grep -F 'City overview' web/dist/index.html >/dev/null
+grep -F 'OpenStreetMap contributors' web/dist/index.html >/dev/null

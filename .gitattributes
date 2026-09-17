@@ -1,0 +1,5 @@
+fixtures/pages/karlsruhe.json linguist-generated=true -diff
+fixtures/pages/stuttgart.json linguist-generated=true -diff
+fixtures/pages/pforzheim.json linguist-generated=true -diff
+fixtures/pages/osm/*.osm.pbf binary linguist-generated=true
+fixtures/pages/osm/*-receipt.json linguist-generated=true

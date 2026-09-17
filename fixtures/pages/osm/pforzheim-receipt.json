@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "sourceFormat": "osm-pbf",
+    "sourceName": "pforzheim.osm.pbf",
+    "sourceSha256": "550ebb431a41f5b14af1951a0d662f60ea2055b1ba2dab35680a8a3e8ad4d99b",
+    "parser": {
+      "repository": "https://github.com/moritzbrantner/geo-analysis",
+      "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
+    }
+  },
+  "transformer": {
+    "repository": "https://github.com/moritzbrantner/city-game",
+    "revision": "osm-scenario-transform-v1"
+  },
+  "transformSchemaVersion": 1,
+  "transformSha256": "940a93bfc1cc679b123878b6fedf2451cf13688eb9583bc8e56d6ab1df500123",
+  "scenarioSchemaVersion": 3,
+  "scenarioSha256": "e61ac9f9f0ef7589efb20ce880f222527e12c1a128ed51f605ee40bdcc846f99"
+}

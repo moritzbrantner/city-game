@@ -445,7 +445,7 @@ fn fit_orthographic_camera(
             .max(point.z.abs())
     });
     let eye_distance = (max_coordinate * 2.0).max(100.0);
-    let eye = Vec3::new(eye_distance, eye_distance * 1.35, eye_distance);
+    let eye = Vec3::new(eye_distance, eye_distance, eye_distance);
     let target = Vec3::ZERO;
     let up = Vec3::new(0.0, 1.0, 0.0);
 
