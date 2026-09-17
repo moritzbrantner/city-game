@@ -3,31 +3,104 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>city-game scenarios</title>
+    <title>city-game</title>
     <link rel="stylesheet" href="./style.css" />
+    <script type="importmap">
+      {
+        "imports": {
+          "@moritzbrantner/settings-browser": "https://cdn.jsdelivr.net/gh/moritzbrantner/settings@1a268c485380eafb4e233a24c5803db4ff1f9ed0/settings-browser.js",
+          "@moritzbrantner/input-bindings-browser": "https://moritzbrantner.github.io/input-bindings/input-bindings-browser.js"
+        }
+      }
+    </script>
   </head>
-  <body>
+  <body data-mode="picker">
     <main>
-      <section class="scene" aria-label="Selected city scenario">
-        <canvas id="scene"></canvas>
+      <section class="scene" aria-label="City scenario view">
+        <canvas id="scene" tabindex="0" aria-label="Scenario preview"></canvas>
+        <div class="scene-mode" aria-live="polite">
+          <strong id="scene-mode">Scenario preview</strong>
+          <span id="scene-hint">Choose a city, then open it to select existing objects.</span>
+        </div>
       </section>
+
       <aside>
-        <p class="eyebrow">Example scenarios</p>
-        <h1>Choose a city to develop</h1>
-        <p>
-          These examples are canonical <code>CityScenario</code> fixtures rendered through the same Rust-to-3D path as
-          imported cities. They are intentionally marked as curated demos; real OSM import remains owned by
-          <code>geo-analysis</code> and the city-game normalization boundary.
-        </p>
-        <nav id="scenario-list" class="scenario-list" aria-label="Example city scenarios"></nav>
-        <p id="scenario-description" class="scenario-description"></p>
-        <dl>
-          <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
-          <div><dt>Region</dt><dd id="region">—</dd></div>
-          <div><dt>Objects</dt><dd id="objects">—</dd></div>
-          <div><dt>Data</dt><dd id="data-kind">—</dd></div>
-        </dl>
-        <p id="status" class="status" role="status" aria-live="polite"></p>
+        <section id="scenario-panel">
+          <p class="eyebrow">Example scenarios</p>
+          <h1>Choose a city to develop</h1>
+          <p>
+            These examples are canonical <code>CityScenario</code> fixtures rendered through the same Rust-to-3D path as
+            imported cities. Picking a scenario is deliberately separate from changing it.
+          </p>
+          <nav id="scenario-list" class="scenario-list" aria-label="Example city scenarios"></nav>
+          <p id="scenario-description" class="scenario-description"></p>
+          <dl>
+            <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
+            <div><dt>Region</dt><dd id="region">—</dd></div>
+            <div><dt>Objects</dt><dd id="objects">—</dd></div>
+            <div><dt>Data</dt><dd id="data-kind">—</dd></div>
+          </dl>
+          <button id="open-scenario" class="primary-action" type="button" disabled>Open city</button>
+        </section>
+
+        <section id="city-panel" hidden>
+          <p class="eyebrow">Selection mode</p>
+          <h1 id="city-title">City</h1>
+          <p id="city-region" class="city-region"></p>
+          <p>
+            Select an existing road, building, water area, or land-use area. Building, deleting, and changing the city are
+            intentionally not enabled in this slice.
+          </p>
+          <dl class="selection-details">
+            <div><dt>Selected</dt><dd id="selection-name">Nothing</dd></div>
+            <div><dt>Type</dt><dd id="selection-kind">—</dd></div>
+            <div><dt>ID</dt><dd id="selection-id">—</dd></div>
+          </dl>
+          <button id="choose-scenario" class="secondary-action" type="button">Choose another city</button>
+        </section>
+
+        <details class="settings-panel">
+          <summary>Settings</summary>
+          <p id="settings-status" class="foundation-status" role="status">Loading shared settings…</p>
+          <div class="settings-grid">
+            <label>
+              <span>Color scheme</span>
+              <select id="setting-color-scheme" disabled>
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <label>
+              <span>Contrast</span>
+              <select id="setting-contrast" disabled>
+                <option value="system">System</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="low">Low</option>
+              </select>
+            </label>
+            <label>
+              <span>Color-vision palette</span>
+              <select id="setting-color-vision" disabled>
+                <option value="off">Off</option>
+                <option value="protanopia">Protanopia</option>
+                <option value="deuteranopia">Deuteranopia</option>
+                <option value="tritanopia">Tritanopia</option>
+                <option value="achromatopsia">Achromatopsia</option>
+              </select>
+            </label>
+            <label class="checkbox-setting">
+              <input id="setting-night-mode" type="checkbox" disabled />
+              <span>Night mode</span>
+            </label>
+          </div>
+        </details>
+
+        <div class="foundation-statuses">
+          <p id="input-status" class="foundation-status" role="status">Loading shared input bindings…</p>
+          <p id="status" class="status" role="status" aria-live="polite"></p>
+        </div>
       </aside>
     </main>
     <script type="module" src="./main.js"></script>
