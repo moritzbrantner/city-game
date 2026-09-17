@@ -299,8 +299,8 @@ function setMode(mode, updateUrl = true) {
     canvas.setAttribute("aria-label", "Scenario preview");
     statusLabel.textContent = "Choose a scenario to preview or open.";
   } else {
-    sceneModeLabel.textContent = "Inspect & navigate";
-    sceneHintLabel.textContent = "Click to inspect · drag to move · wheel to zoom · Home for overview · F focuses selection";
+    sceneModeLabel.textContent = "Isometric inspection";
+    sceneHintLabel.textContent = "Click to inspect · Shift + drag to move · wheel to zoom · Home for overview · F focuses selection";
     canvas.setAttribute("aria-label", `Inspect and navigate ${currentScenario.name}`);
     statusLabel.textContent = "Inspection mode active. City state remains unchanged.";
     canvas.focus({ preventScroll: true });
@@ -799,7 +799,7 @@ async function initializeInputBindings() {
     stopPropagation: false,
   });
   inputStatus.textContent =
-    "Shared input bindings active · arrows move · wheel/+/− zoom · Home overview · F focus · Esc clear/back";
+    "Shared input bindings active · Shift + drag/arrows move · wheel/+/− zoom · Home overview · F focus · Esc clear/back";
 }
 
 function cityInputRegistry() {
@@ -1078,6 +1078,11 @@ canvas.addEventListener("pointermove", (event) => {
   const pointer = canvasPointer(event);
   lastCanvasPointer = pointer;
   if (!pointerGesture || pointerGesture.pointerId !== event.pointerId || appMode !== "city") return;
+  if (!event.shiftKey) {
+    pointerGesture.lastX = pointer.x;
+    pointerGesture.lastY = pointer.y;
+    return;
+  }
 
   const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);
   if (!pointerGesture.dragging && totalDistance >= DRAG_THRESHOLD_PX) {
@@ -1100,12 +1105,13 @@ canvas.addEventListener("pointerup", (event) => {
   if (!pointerGesture || pointerGesture.pointerId !== event.pointerId) return;
   const pointer = canvasPointer(event);
   lastCanvasPointer = pointer;
+  const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);
   const wasDragging = pointerGesture.dragging;
   pointerGesture = null;
   delete canvas.dataset.dragging;
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   flushQueuedPan();
-  if (!wasDragging) pickAtPointer(pointer);
+  if (!wasDragging && totalDistance < DRAG_THRESHOLD_PX) pickAtPointer(pointer);
 });
 
 canvas.addEventListener("pointercancel", (event) => {
