@@ -13,6 +13,10 @@ const MAX_PAN = 8;
 const ZOOM_FACTOR = 1.25;
 const KEYBOARD_PAN_STEP = 0.08;
 const DRAG_THRESHOLD_PX = 4;
+const CLICK_TOLERANCE_MOUSE_PX = 10;
+const CLICK_TOLERANCE_TOUCH_PX = 16;
+const PICK_SLOP_MOUSE_PX = 16;
+const PICK_SLOP_TOUCH_PX = 24;
 const OVERVIEW_VIEW = Object.freeze({ panX: 0, panY: 0, zoom: 1 });
 
 const APPEARANCE_DEFINITIONS = [
@@ -525,10 +529,10 @@ function pickAtPointer(pointer) {
 
 function pickNode(frame, pointer) {
   const candidates = [];
+  const slop = pointer.pointerType === "touch" ? PICK_SLOP_TOUCH_PX : PICK_SLOP_MOUSE_PX;
   for (const node of frame.nodes) {
     const bounds = projectNodeBounds(frame.camera, node, pointer.width, pointer.height);
     if (!bounds) continue;
-    const slop = 8;
     if (
       pointer.x < bounds.minX - slop ||
       pointer.x > bounds.maxX + slop ||
@@ -539,21 +543,44 @@ function pickNode(frame, pointer) {
     }
     const centerX = (bounds.minX + bounds.maxX) * 0.5;
     const centerY = (bounds.minY + bounds.maxY) * 0.5;
+    const dx = Math.max(bounds.minX - pointer.x, 0, pointer.x - bounds.maxX);
+    const dy = Math.max(bounds.minY - pointer.y, 0, pointer.y - bounds.maxY);
+    const entityId = entityIdForNode(node.id);
+    const kind = entityIndex.get(entityId)?.kind;
     candidates.push({
       node,
-      depth: bounds.depth,
-      distanceSquared: (pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2,
+      hitDistanceSquared: dx * dx + dy * dy,
+      centerDistanceSquared: (pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2,
       area: Math.max(1, (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)),
+      kindPriority: pickKindPriority(kind),
+      depth: bounds.depth,
     });
   }
   candidates.sort(
     (left, right) =>
-      left.depth - right.depth ||
-      left.distanceSquared - right.distanceSquared ||
+      left.hitDistanceSquared - right.hitDistanceSquared ||
       left.area - right.area ||
+      left.kindPriority - right.kindPriority ||
+      left.centerDistanceSquared - right.centerDistanceSquared ||
+      left.depth - right.depth ||
       left.node.id.localeCompare(right.node.id),
   );
   return candidates[0]?.node ?? null;
+}
+
+function pickKindPriority(kind) {
+  switch (kind) {
+    case "Building":
+      return 0;
+    case "Road":
+      return 1;
+    case "Water":
+      return 2;
+    case "Land use":
+      return 3;
+    default:
+      return 4;
+  }
 }
 
 function projectNodeBounds(camera, node, width, height) {
@@ -1010,6 +1037,7 @@ function canvasPointer(event) {
     y: event.clientY - rect.top,
     width: rect.width,
     height: rect.height,
+    pointerType: event.pointerType,
   };
 }
 
@@ -1111,7 +1139,9 @@ canvas.addEventListener("pointerup", (event) => {
   delete canvas.dataset.dragging;
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
   flushQueuedPan();
-  if (!wasDragging && totalDistance < DRAG_THRESHOLD_PX) pickAtPointer(pointer);
+  const clickTolerance =
+    event.pointerType === "touch" ? CLICK_TOLERANCE_TOUCH_PX : CLICK_TOLERANCE_MOUSE_PX;
+  if (!wasDragging && totalDistance <= clickTolerance) pickAtPointer(pointer);
 });
 
 canvas.addEventListener("pointercancel", (event) => {
