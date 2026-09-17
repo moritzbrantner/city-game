@@ -67,8 +67,12 @@ impl fmt::Display for RenderViewError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NonFinitePan => formatter.write_str("render-view pan must be finite"),
-            Self::PanOutOfRange => formatter.write_str("render-view pan exceeds the supported inspection range"),
-            Self::ZoomOutOfRange => formatter.write_str("render-view zoom must be finite and between 0.5 and 32"),
+            Self::PanOutOfRange => {
+                formatter.write_str("render-view pan exceeds the supported inspection range")
+            }
+            Self::ZoomOutOfRange => {
+                formatter.write_str("render-view zoom must be finite and between 0.5 and 32")
+            }
         }
     }
 }
@@ -876,12 +880,8 @@ mod tests {
     fn default_inspection_view_is_byte_for_byte_the_fitted_overview() {
         let scenario = scenario();
         let overview = build_render_frame(&scenario, 16.0 / 9.0).unwrap();
-        let inspected = build_render_frame_with_view(
-            &scenario,
-            16.0 / 9.0,
-            RenderView::overview(),
-        )
-        .unwrap();
+        let inspected =
+            build_render_frame_with_view(&scenario, 16.0 / 9.0, RenderView::overview()).unwrap();
         assert_eq!(overview, inspected);
     }
 
@@ -901,9 +901,20 @@ mod tests {
         .unwrap();
         assert_eq!(overview.nodes, inspected.nodes);
         assert_eq!(overview.camera.view_matrix, inspected.camera.view_matrix);
-        assert_ne!(overview.camera.projection_matrix, inspected.camera.projection_matrix);
-        assert!((inspected.camera.projection_matrix[0] - overview.camera.projection_matrix[0] * 2.0).abs() < 1.0e-5);
-        assert!((inspected.camera.projection_matrix[5] - overview.camera.projection_matrix[5] * 2.0).abs() < 1.0e-5);
+        assert_ne!(
+            overview.camera.projection_matrix,
+            inspected.camera.projection_matrix
+        );
+        assert!(
+            (inspected.camera.projection_matrix[0] - overview.camera.projection_matrix[0] * 2.0)
+                .abs()
+                < 1.0e-5
+        );
+        assert!(
+            (inspected.camera.projection_matrix[5] - overview.camera.projection_matrix[5] * 2.0)
+                .abs()
+                < 1.0e-5
+        );
     }
 
     #[test]
