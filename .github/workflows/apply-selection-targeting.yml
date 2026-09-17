@@ -1,0 +1,315 @@
+name: Apply selection targeting refinement
+
+on:
+  push:
+    branches: [feat/improve-city-picking]
+    paths:
+      - ".github/workflows/apply-selection-targeting.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/improve-city-picking
+          fetch-depth: 0
+
+      - name: Improve click targeting and overlap selection
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("web/src/main.js")
+          text = path.read_text()
+
+          def replace_once(old: str, new: str) -> None:
+              global text
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match, found {count}: {old[:100]!r}")
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              "const DRAG_THRESHOLD_PX = 4;\n",
+              "const DRAG_THRESHOLD_PX = 4;\n"
+              "const CLICK_TOLERANCE_MOUSE_PX = 9;\n"
+              "const CLICK_TOLERANCE_TOUCH_PX = 16;\n"
+              "const PICK_RADIUS_MOUSE_PX = 14;\n"
+              "const PICK_RADIUS_TOUCH_PX = 24;\n"
+              "const PICK_CYCLE_DISTANCE_PX = 8;\n",
+          )
+
+          replace_once(
+              "let selectedEntity = null;\n",
+              "let selectedEntity = null;\nlet pickCycle = null;\nlet pickProjectionCache = null;\n",
+          )
+
+          replace_once(
+              "  cameraView = nextView;\n  entityIndex = buildEntityIndex(canonicalScenario);",
+              "  cameraView = nextView;\n  pickCycle = null;\n  pickProjectionCache = null;\n  entityIndex = buildEntityIndex(canonicalScenario);",
+          )
+
+          replace_once(
+              '    sceneHintLabel.textContent = "Click to inspect · Shift + drag to move · wheel to zoom · Home for overview · F focuses selection";',
+              '    sceneHintLabel.textContent = "Click near an object to inspect · click again to cycle overlaps · Shift + drag to move · wheel to zoom";',
+          )
+
+          replace_once(
+              "  appMode = mode;\n",
+              "  appMode = mode;\n  pickCycle = null;\n",
+          )
+
+          replace_once(
+              "function setCameraView(nextView, status) {\n  if (!currentSession) return;\n  cameraView = {",
+              "function setCameraView(nextView, status) {\n  if (!currentSession) return;\n  pickCycle = null;\n  pickProjectionCache = null;\n  cameraView = {",
+          )
+
+          picking = r'''function pickAtPointer(pointer) {
+  if (appMode !== "city" || !currentFrame || !pointer) return;
+  const candidates = pickNodes(currentFrame, pointer);
+  if (candidates.length === 0) {
+    pickCycle = null;
+    setSelectedEntity(null);
+    statusLabel.textContent = "Selection cleared.";
+    return;
+  }
+
+  const signature = candidates.map((node) => entityIdForNode(node.id)).join("\u001f");
+  const canCycle =
+    pickCycle &&
+    pickCycle.signature === signature &&
+    Math.hypot(pointer.x - pickCycle.x, pointer.y - pickCycle.y) <= PICK_CYCLE_DISTANCE_PX;
+  const index = canCycle ? (pickCycle.index + 1) % candidates.length : 0;
+  pickCycle = { x: pointer.x, y: pointer.y, signature, index };
+
+  const node = candidates[index];
+  const entityId = entityIdForNode(node.id);
+  const selection = entityIndex.get(entityId) ?? { id: entityId, kind: "Object", entity: {} };
+  setSelectedEntity(selection);
+  const cycleHint =
+    candidates.length > 1 ? ` ${index + 1}/${candidates.length} nearby; click again to cycle.` : "";
+  statusLabel.textContent = `Inspecting ${entityDisplayName(selection)}.${cycleHint}`;
+}
+
+function pickNodes(frame, pointer) {
+  const radius = pointer.pointerType === "touch" ? PICK_RADIUS_TOUCH_PX : PICK_RADIUS_MOUSE_PX;
+  const bestByEntity = new Map();
+  for (const entry of projectedPickEntries(frame, pointer.width, pointer.height)) {
+    const distance = distanceToProjectedShape(pointer, entry.bounds);
+    if (distance > radius) continue;
+
+    const entityId = entityIdForNode(entry.node.id);
+    const selection = entityIndex.get(entityId);
+    const centerX = (entry.bounds.minX + entry.bounds.maxX) * 0.5;
+    const centerY = (entry.bounds.minY + entry.bounds.maxY) * 0.5;
+    const candidate = {
+      node: entry.node,
+      entityId,
+      distance,
+      kindPriority: pickKindPriority(selection?.kind),
+      centerDistanceSquared: (pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2,
+      area: Math.max(1, polygonArea(entry.bounds.outline)),
+      depth: entry.bounds.depth,
+    };
+    const previous = bestByEntity.get(entityId);
+    if (!previous || comparePickCandidates(candidate, previous) < 0) {
+      bestByEntity.set(entityId, candidate);
+    }
+  }
+
+  return [...bestByEntity.values()].sort(comparePickCandidates).map((candidate) => candidate.node);
+}
+
+function projectedPickEntries(frame, width, height) {
+  if (
+    pickProjectionCache &&
+    pickProjectionCache.frame === frame &&
+    pickProjectionCache.width === width &&
+    pickProjectionCache.height === height
+  ) {
+    return pickProjectionCache.entries;
+  }
+
+  const entries = [];
+  for (const node of frame.nodes) {
+    const bounds = projectNodeBounds(frame.camera, node, width, height);
+    if (bounds) entries.push({ node, bounds });
+  }
+  pickProjectionCache = { frame, width, height, entries };
+  return entries;
+}
+
+function comparePickCandidates(left, right) {
+  return (
+    left.distance - right.distance ||
+    left.kindPriority - right.kindPriority ||
+    left.centerDistanceSquared - right.centerDistanceSquared ||
+    left.area - right.area ||
+    left.depth - right.depth ||
+    left.entityId.localeCompare(right.entityId)
+  );
+}
+
+function pickKindPriority(kind) {
+  switch (kind) {
+    case "Building":
+      return 0;
+    case "Road":
+      return 1;
+    case "Water":
+      return 2;
+    case "Land use":
+      return 3;
+    default:
+      return 4;
+  }
+}
+'''
+
+          pattern = re.compile(r'function pickAtPointer\(pointer\) \{.*?\n\}\n\nfunction projectNodeBounds', re.S)
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit("could not find picking function block")
+          text = text[:match.start()] + picking + "\nfunction projectNodeBounds" + text[match.end():]
+
+          geometry = r'''function projectNodeBounds(camera, node, width, height) {
+  if (node.geometry?.kind !== "box") return null;
+  const [sizeX, sizeY, sizeZ] = node.geometry.size;
+  const projected = [];
+  for (const x of [-sizeX * 0.5, sizeX * 0.5]) {
+    for (const y of [-sizeY * 0.5, sizeY * 0.5]) {
+      for (const z of [-sizeZ * 0.5, sizeZ * 0.5]) {
+        const worldPoint = transformNodePoint(node, [x, y, z]);
+        const point = projectWorldPoint(camera, worldPoint, { width, height });
+        if (point.visible) projected.push(point);
+      }
+    }
+  }
+  if (projected.length === 0) return null;
+  const outline = convexHull(projected.map((point) => ({ x: point.x, y: point.y })));
+  return {
+    minX: Math.min(...projected.map((point) => point.x)),
+    maxX: Math.max(...projected.map((point) => point.x)),
+    minY: Math.min(...projected.map((point) => point.y)),
+    maxY: Math.max(...projected.map((point) => point.y)),
+    depth: Math.min(...projected.map((point) => point.depth)),
+    outline,
+  };
+}
+
+function distanceToProjectedShape(point, bounds) {
+  if (bounds.outline.length >= 3) return distanceToPolygon(point, bounds.outline);
+  const dx = Math.max(bounds.minX - point.x, 0, point.x - bounds.maxX);
+  const dy = Math.max(bounds.minY - point.y, 0, point.y - bounds.maxY);
+  return Math.hypot(dx, dy);
+}
+
+function distanceToPolygon(point, polygon) {
+  if (pointInPolygon(point, polygon)) return 0;
+  let minimumSquared = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const start = polygon[index];
+    const end = polygon[(index + 1) % polygon.length];
+    minimumSquared = Math.min(minimumSquared, distanceToSegmentSquared(point, start, end));
+  }
+  return Math.sqrt(minimumSquared);
+}
+
+function pointInPolygon(point, polygon) {
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const currentPoint = polygon[index];
+    const previousPoint = polygon[previous];
+    const crosses =
+      currentPoint.y > point.y !== previousPoint.y > point.y &&
+      point.x <
+        ((previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)) /
+          (previousPoint.y - currentPoint.y) +
+          currentPoint.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function distanceToSegmentSquared(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  if (Math.abs(dx) <= Number.EPSILON && Math.abs(dy) <= Number.EPSILON) {
+    return (point.x - start.x) ** 2 + (point.y - start.y) ** 2;
+  }
+  const t = clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy), 0, 1);
+  const x = start.x + t * dx;
+  const y = start.y + t * dy;
+  return (point.x - x) ** 2 + (point.y - y) ** 2;
+}
+
+function convexHull(points) {
+  const sorted = [...points].sort((left, right) => left.x - right.x || left.y - right.y);
+  const unique = sorted.filter(
+    (point, index) => index === 0 || point.x !== sorted[index - 1].x || point.y !== sorted[index - 1].y,
+  );
+  if (unique.length <= 2) return unique;
+
+  const cross = (origin, first, second) =>
+    (first.x - origin.x) * (second.y - origin.y) - (first.y - origin.y) * (second.x - origin.x);
+  const lower = [];
+  for (const point of unique) {
+    while (lower.length >= 2 && cross(lower.at(-2), lower.at(-1), point) <= 0) lower.pop();
+    lower.push(point);
+  }
+  const upper = [];
+  for (const point of [...unique].reverse()) {
+    while (upper.length >= 2 && cross(upper.at(-2), upper.at(-1), point) <= 0) upper.pop();
+    upper.push(point);
+  }
+  lower.pop();
+  upper.pop();
+  return [...lower, ...upper];
+}
+
+function polygonArea(polygon) {
+  if (polygon.length < 3) return 1;
+  let twiceArea = 0;
+  for (let index = 0; index < polygon.length; index += 1) {
+    const currentPoint = polygon[index];
+    const nextPoint = polygon[(index + 1) % polygon.length];
+    twiceArea += currentPoint.x * nextPoint.y - nextPoint.x * currentPoint.y;
+  }
+  return Math.abs(twiceArea) * 0.5;
+}
+'''
+
+          pattern = re.compile(r'function projectNodeBounds\(camera, node, width, height\) \{.*?\n\}\n\nfunction transformNodePoint', re.S)
+          match = pattern.search(text)
+          if not match:
+              raise SystemExit("could not find projected bounds block")
+          text = text[:match.start()] + geometry + "\nfunction transformNodePoint" + text[match.end():]
+
+          replace_once(
+              "    height: rect.height,\n  };",
+              "    height: rect.height,\n    pointerType: event.pointerType,\n  };",
+          )
+
+          replace_once(
+              "  if (!wasDragging && totalDistance < DRAG_THRESHOLD_PX) pickAtPointer(pointer);",
+              "  const clickTolerance =\n"
+              "    event.pointerType === \"touch\" ? CLICK_TOLERANCE_TOUCH_PX : CLICK_TOLERANCE_MOUSE_PX;\n"
+              "  if (!wasDragging && totalDistance <= clickTolerance) pickAtPointer(pointer);",
+          )
+
+          path.write_text(text)
+          Path(".github/workflows/apply-selection-targeting.yml").unlink()
+          PY
+
+      - name: Commit selection targeting refinement
+        run: |
+          git add -A
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Make city object selection forgiving and precise"
+          git push origin HEAD:feat/improve-city-picking
