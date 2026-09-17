@@ -1,28 +1,19 @@
 name: Refresh Pages OSM snapshots
 
 on:
-  pull_request:
-    paths:
-      - "fixtures/pages/osm-sources.json"
-      - "fixtures/osm-preserve-all-transform.json"
-      - "scripts/refresh-pages-osm.py"
-      - ".github/workflows/refresh-pages-osm.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
-concurrency:
-  group: pages-osm-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
 jobs:
   refresh:
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.ref_name != github.event.repository.default_branch
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - name: Install deterministic OSM extraction tool
         run: |
@@ -32,7 +23,7 @@ jobs:
         run: python3 scripts/refresh-pages-osm.py --refresh
       - name: Commit refreshed evidence
         env:
-          BRANCH: ${{ github.head_ref }}
+          BRANCH: ${{ github.ref_name }}
         run: |
           git add fixtures/pages/osm-sources.json fixtures/pages/osm fixtures/pages/karlsruhe.json fixtures/pages/stuttgart.json fixtures/pages/pforzheim.json
           if git diff --cached --quiet; then

@@ -4,6 +4,8 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+python3 scripts/refresh-pages-osm.py --verify
+
 rm -rf web/dist web/public/scenarios
 mkdir -p web/public/scenarios
 
@@ -59,7 +61,7 @@ cp target/wasm32-unknown-unknown/release/city_game_core.wasm web/public/city-gam
   bun run build
 )
 
-for asset in index.html main.js style.css scenarios.json city-game-core.wasm; do
+for asset in index.html main.js surface.js style.css scenarios.json city-game-core.wasm; do
   test -s "web/dist/$asset" || {
     echo "missing Pages artifact: web/dist/$asset" >&2
     exit 1
@@ -82,6 +84,7 @@ for scenario in scenarios:
 PY
 
 grep -F 'href="./style.css"' web/dist/index.html >/dev/null
+grep -F 'src="./surface.js"' web/dist/index.html >/dev/null
 grep -F 'src="./main.js"' web/dist/index.html >/dev/null
 grep -F 'scenarios.json' web/dist/main.js >/dev/null
 grep -F 'city-game-core.wasm' web/dist/main.js >/dev/null
@@ -90,5 +93,7 @@ grep -F '@moritzbrantner/input-bindings-browser' web/dist/index.html >/dev/null
 grep -F 'appearance.color_scheme' web/dist/main.js >/dev/null
 grep -F 'city.view.overview' web/dist/main.js >/dev/null
 grep -F 'city.view.zoomIn' web/dist/main.js >/dev/null
+grep -F 'Shift + drag to move' web/dist/main.js >/dev/null
 grep -F 'Focus selected' web/dist/index.html >/dev/null
 grep -F 'City overview' web/dist/index.html >/dev/null
+grep -F 'OpenStreetMap contributors' web/dist/index.html >/dev/null
