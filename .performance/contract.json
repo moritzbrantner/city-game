@@ -1,0 +1,91 @@
+{
+  "schemaVersion": 1,
+  "suite": "city-game/product-composition-v1",
+  "description": "City-owned simulation and rendering composition. OSM parsing remains outside this contract because geo-analysis/moenarch-geo-io-osm owns source parsing; city-game budgets canonical scenario/save semantics after that seam.",
+  "scenarios": [
+    {
+      "id": "fixed-step-10000",
+      "kind": "scaling",
+      "description": "Advance the canonical demo save through 10,000 fixed simulation steps from an identical initial save.",
+      "dimensions": {
+        "fixture": "fixtures/demo-scenario.json",
+        "fixed_steps": 10000,
+        "repetitions": 2
+      },
+      "correctnessEvidence": [
+        "byte-identical final save across repeated runs",
+        "scenario schema validation",
+        "fixed-step advancement completes without error"
+      ],
+      "metrics": [
+        {
+          "name": "elapsed_ns",
+          "unit": "ns",
+          "direction": "lower",
+          "signal": "wall-clock",
+          "blocking": false
+        },
+        {
+          "name": "save_bytes",
+          "unit": "bytes",
+          "direction": "lower",
+          "signal": "size",
+          "blocking": false
+        },
+        {
+          "name": "system_visits",
+          "unit": "visits",
+          "direction": "lower",
+          "signal": "operation-count",
+          "blocking": false,
+          "notes": "Instrumentation prerequisite: expose deterministic per-system fixed-step work before enabling a blocking budget."
+        },
+        {
+          "name": "materializations",
+          "unit": "materializations",
+          "direction": "lower",
+          "signal": "operation-count",
+          "blocking": false,
+          "notes": "Track save/scenario-derived recomputation so fixed-step code cannot silently rebuild unchanged indexes or views every tick."
+        }
+      ]
+    },
+    {
+      "id": "render-frame-demo",
+      "kind": "journey",
+      "description": "Build the generic-3D-consumer render frame from the canonical CityScenario twice and require identical output.",
+      "dimensions": {
+        "fixture": "fixtures/demo-scenario.json",
+        "aspect": "16:9"
+      },
+      "correctnessEvidence": [
+        "byte-identical render-frame output",
+        "scenario schema validation"
+      ],
+      "metrics": [
+        {
+          "name": "elapsed_ns",
+          "unit": "ns",
+          "direction": "lower",
+          "signal": "wall-clock",
+          "blocking": false
+        },
+        {
+          "name": "frame_bytes",
+          "unit": "bytes",
+          "direction": "lower",
+          "signal": "size",
+          "blocking": false
+        },
+        {
+          "name": "renderables_built",
+          "unit": "renderables",
+          "direction": "lower",
+          "signal": "operation-count",
+          "blocking": false,
+          "notes": "Planned composition counter; generic camera/rendering internals remain owned by 3d-lab rather than duplicated here."
+        }
+      ]
+    }
+  ]
+}

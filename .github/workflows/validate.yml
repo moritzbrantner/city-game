@@ -39,6 +39,9 @@ jobs:
       - name: Test Rust with locked dependencies
         run: cargo test --locked --workspace --all-features
 
+      - name: Run deterministic performance smoke contract
+        run: bash scripts/performance-smoke.sh
+
       - name: Check browser WASM target
         run: cargo check --locked -p city-game-core --target wasm32-unknown-unknown
 
