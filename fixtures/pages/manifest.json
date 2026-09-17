@@ -5,24 +5,24 @@
       "id": "karlsruhe",
       "name": "Karlsruhe",
       "region": "Baden-Württemberg, Germany",
-      "description": "A radial-center scenario that makes the fan-shaped street pattern and central green space easy to read.",
-      "dataKind": "Curated canonical demo",
+      "description": "A pinned OpenStreetMap snapshot around the palace and inner-city fan, imported through the canonical OSM pipeline.",
+      "dataKind": "Pinned OpenStreetMap snapshot",
       "scenarioPath": "fixtures/pages/karlsruhe.json"
     },
     {
       "id": "stuttgart",
       "name": "Stuttgart",
       "region": "Baden-Württemberg, Germany",
-      "description": "A denser valley-center scenario with a strong arterial spine, cross streets, and a large park edge.",
-      "dataKind": "Curated canonical demo",
+      "description": "A pinned OpenStreetMap snapshot of the central valley, imported through the canonical OSM pipeline.",
+      "dataKind": "Pinned OpenStreetMap snapshot",
       "scenarioPath": "fixtures/pages/stuttgart.json"
     },
     {
       "id": "pforzheim",
       "name": "Pforzheim",
       "region": "Baden-Württemberg, Germany",
-      "description": "A river-crossing scenario that highlights how water, bridges, roads, and mixed building stock shape the playable area.",
-      "dataKind": "Curated canonical demo",
+      "description": "A pinned OpenStreetMap snapshot of the river-crossing city center, imported through the canonical OSM pipeline.",
+      "dataKind": "Pinned OpenStreetMap snapshot",
       "scenarioPath": "fixtures/pages/pforzheim.json"
     }
   ]

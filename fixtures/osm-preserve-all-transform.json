@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "roads": {
+    "mappings": [],
+    "unmapped": "preserve",
+    "preserveNames": true,
+    "preserveLanes": true,
+    "preserveMaxSpeed": true
+  },
+  "buildings": "preserve",
+  "water": "preserve",
+  "landUse": "preserve",
+  "transit": "preserve"
+}

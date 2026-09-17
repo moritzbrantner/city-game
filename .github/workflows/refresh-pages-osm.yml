@@ -1,0 +1,45 @@
+name: Refresh Pages OSM snapshots
+
+on:
+  pull_request:
+    paths:
+      - "fixtures/pages/osm-sources.json"
+      - "fixtures/osm-preserve-all-transform.json"
+      - "scripts/refresh-pages-osm.py"
+      - ".github/workflows/refresh-pages-osm.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pages-osm-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Install deterministic OSM extraction tool
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes osmium-tool
+      - name: Refresh pinned real-city extracts
+        run: python3 scripts/refresh-pages-osm.py --refresh
+      - name: Commit refreshed evidence
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          git add fixtures/pages/osm-sources.json fixtures/pages/osm fixtures/pages/karlsruhe.json fixtures/pages/stuttgart.json fixtures/pages/pforzheim.json
+          if git diff --cached --quiet; then
+            echo "OSM snapshots already current"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Refresh pinned real OSM city snapshots"
+          git push origin "HEAD:${BRANCH}"

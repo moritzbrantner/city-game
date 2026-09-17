@@ -24,43 +24,69 @@
         </div>
       </section>
 
-      <aside>
-        <section id="scenario-panel">
-          <p class="eyebrow">Example scenarios</p>
-          <h1>Choose a city to develop</h1>
-          <p>
-            These examples are canonical <code>CityScenario</code> fixtures rendered through the same Rust-to-3D path as
-            imported cities. Picking a scenario is deliberately separate from changing it.
+      <aside class="menu-shell">
+        <header class="menu-context" aria-live="polite">
+          <div>
+            <p class="eyebrow">city-game</p>
+            <p id="menu-context-label" class="menu-context-label">Choose a city</p>
+          </div>
+          <span id="menu-mode-chip" class="mode-chip">Scenario</span>
+        </header>
+
+        <section id="scenario-panel" class="menu-view">
+          <h1>Choose a city to explore</h1>
+          <p class="lede">
+            Select a real-world snapshot, preview it, then open the city for read-only inspection. Scenario selection stays
+            separate from simulation changes.
           </p>
           <nav id="scenario-list" class="scenario-list" aria-label="Example city scenarios"></nav>
           <p id="scenario-description" class="scenario-description"></p>
-          <dl>
-            <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
-            <div><dt>Region</dt><dd id="region">—</dd></div>
-            <div><dt>Objects</dt><dd id="objects">—</dd></div>
-            <div><dt>Data</dt><dd id="data-kind">—</dd></div>
-          </dl>
-          <button id="open-scenario" class="primary-action" type="button" disabled>Open city</button>
+
+          <details class="menu-section selected-scenario-panel" open>
+            <summary>Selected city</summary>
+            <dl class="compact-details">
+              <div><dt>Scenario</dt><dd id="scenario">loading</dd></div>
+              <div><dt>Region</dt><dd id="region">—</dd></div>
+              <div><dt>Objects</dt><dd id="objects">—</dd></div>
+              <div><dt>Data</dt><dd id="data-kind">—</dd></div>
+            </dl>
+          </details>
+
+          <button id="open-scenario" class="primary-action" type="button" disabled>
+            <span>Open city</span>
+            <span aria-hidden="true">→</span>
+          </button>
         </section>
 
-        <section id="city-panel" hidden>
-          <p class="eyebrow">Inspect &amp; navigate</p>
-          <h1 id="city-title">City</h1>
-          <p id="city-region" class="city-region"></p>
-          <p>
-            Inspect the existing city without changing it. Drag the scene to move, use the wheel or zoom controls to
-            change scale, and select an object to see its canonical details.
+        <section id="city-panel" class="menu-view" hidden>
+          <div class="city-heading">
+            <div>
+              <p class="eyebrow">Inspect &amp; navigate</p>
+              <h1 id="city-title">City</h1>
+              <p id="city-region" class="city-region"></p>
+            </div>
+            <button id="choose-scenario" class="compact-action" type="button">Change city</button>
+          </div>
+          <p class="lede">
+            Click an object to inspect it. Hold <kbd>Shift</kbd> while dragging to move the camera, and use the wheel or
+            zoom controls to change scale.
           </p>
 
           <div class="view-controls" aria-label="City view controls">
-            <button id="view-overview" type="button">Overview</button>
-            <button id="view-zoom-out" type="button" aria-label="Zoom out">−</button>
-            <output id="view-zoom" aria-label="Current zoom">1.00×</output>
-            <button id="view-zoom-in" type="button" aria-label="Zoom in">+</button>
-            <button id="view-focus" type="button" disabled>Focus selected</button>
+            <button id="view-overview" class="tool-button" type="button">
+              <span>Fit city</span><kbd>Home</kbd>
+            </button>
+            <div class="zoom-control" aria-label="Zoom controls">
+              <button id="view-zoom-out" type="button" aria-label="Zoom out">−</button>
+              <output id="view-zoom" aria-label="Current zoom">1.00×</output>
+              <button id="view-zoom-in" type="button" aria-label="Zoom in">+</button>
+            </div>
+            <button id="view-focus" class="tool-button" type="button" disabled>
+              <span>Focus selected</span><kbd>F</kbd>
+            </button>
           </div>
 
-          <details class="overview-panel" open>
+          <details class="menu-section overview-panel" open>
             <summary>City overview</summary>
             <dl class="compact-details">
               <div><dt>Roads</dt><dd id="overview-roads">—</dd></div>
@@ -70,18 +96,22 @@
             </dl>
           </details>
 
-          <h2 class="section-heading">Inspection</h2>
-          <dl class="selection-details">
-            <div><dt>Selected</dt><dd id="selection-name">Nothing</dd></div>
-            <div><dt>Type</dt><dd id="selection-kind">—</dd></div>
-            <div><dt>ID</dt><dd id="selection-id">—</dd></div>
-          </dl>
-          <dl id="selection-extra" class="compact-details selection-extra" aria-label="Selected object details"></dl>
-          <button id="choose-scenario" class="secondary-action" type="button">Choose another city</button>
+          <details id="inspection-panel" class="menu-section inspection-panel" open>
+            <summary>
+              <span>Inspection</span>
+              <small id="inspection-summary">Nothing selected</small>
+            </summary>
+            <dl class="selection-details compact-details">
+              <div><dt>Selected</dt><dd id="selection-name">Nothing</dd></div>
+              <div><dt>Type</dt><dd id="selection-kind">—</dd></div>
+              <div><dt>ID</dt><dd id="selection-id">—</dd></div>
+            </dl>
+            <dl id="selection-extra" class="compact-details selection-extra" aria-label="Selected object details"></dl>
+          </details>
         </section>
 
-        <details class="settings-panel">
-          <summary>Settings</summary>
+        <details class="settings-panel menu-section">
+          <summary>Appearance</summary>
           <p id="settings-status" class="foundation-status" role="status">Loading shared settings…</p>
           <div class="settings-grid">
             <label>
@@ -122,8 +152,13 @@
           <p id="input-status" class="foundation-status" role="status">Loading shared input bindings…</p>
           <p id="status" class="status" role="status" aria-live="polite"></p>
         </div>
+        <p class="osm-attribution">
+          Real-city scenario data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>,
+          distributed under ODbL.
+        </p>
       </aside>
     </main>
+    <script type="module" src="./surface.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
 </html>

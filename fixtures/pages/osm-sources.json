@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "osmiumVersion": null,
+  "sources": [
+    {
+      "id": "karlsruhe",
+      "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/karlsruhe-regbez-260915.osm.pbf",
+      "sourceBytes": 154226606,
+      "sourceSha256": null,
+      "bbox": [8.392, 49.0, 8.414, 49.016],
+      "extractPath": "fixtures/pages/osm/karlsruhe.osm.pbf",
+      "extractSha256": null,
+      "scenarioPath": "fixtures/pages/karlsruhe.json",
+      "receiptPath": "fixtures/pages/osm/karlsruhe-receipt.json"
+    },
+    {
+      "id": "stuttgart",
+      "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/stuttgart-regbez-260915.osm.pbf",
+      "sourceBytes": 211147036,
+      "sourceSha256": null,
+      "bbox": [9.17, 48.765, 9.195, 48.783],
+      "extractPath": "fixtures/pages/osm/stuttgart.osm.pbf",
+      "extractSha256": null,
+      "scenarioPath": "fixtures/pages/stuttgart.json",
+      "receiptPath": "fixtures/pages/osm/stuttgart-receipt.json"
+    },
+    {
+      "id": "pforzheim",
+      "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/karlsruhe-regbez-260915.osm.pbf",
+      "sourceBytes": 154226606,
+      "sourceSha256": null,
+      "bbox": [8.689, 48.882, 8.711, 48.899],
+      "extractPath": "fixtures/pages/osm/pforzheim.osm.pbf",
+      "extractSha256": null,
+      "scenarioPath": "fixtures/pages/pforzheim.json",
+      "receiptPath": "fixtures/pages/osm/pforzheim-receipt.json"
+    }
+  ]
+}
