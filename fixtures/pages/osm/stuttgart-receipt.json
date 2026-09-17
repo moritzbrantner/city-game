@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "sourceFormat": "osm-pbf",
+    "sourceName": "stuttgart.osm.pbf",
+    "sourceSha256": "1335b469f1270e4f5ebb04544a27c80c0c48d318402fba2dca1d8d0ed355fa8b",
+    "parser": {
+      "repository": "https://github.com/moritzbrantner/geo-analysis",
+      "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
+    }
+  },
+  "transformer": {
+    "repository": "https://github.com/moritzbrantner/city-game",
+    "revision": "osm-scenario-transform-v1"
+  },
+  "transformSchemaVersion": 1,
+  "transformSha256": "940a93bfc1cc679b123878b6fedf2451cf13688eb9583bc8e56d6ab1df500123",
+  "scenarioSchemaVersion": 3,
+  "scenarioSha256": "807cfb50d1aa5a4c05c93bfb91246d746f399c7c5cf957b3d1c377c6fb70999a"
+}

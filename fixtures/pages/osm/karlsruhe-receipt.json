@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "sourceFormat": "osm-pbf",
+    "sourceName": "karlsruhe.osm.pbf",
+    "sourceSha256": "51cfd4d298abd595bfb576cbcc546d9bcd80fefb1c011af151dfeffe94b1a3b7",
+    "parser": {
+      "repository": "https://github.com/moritzbrantner/geo-analysis",
+      "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
+    }
+  },
+  "transformer": {
+    "repository": "https://github.com/moritzbrantner/city-game",
+    "revision": "osm-scenario-transform-v1"
+  },
+  "transformSchemaVersion": 1,
+  "transformSha256": "940a93bfc1cc679b123878b6fedf2451cf13688eb9583bc8e56d6ab1df500123",
+  "scenarioSchemaVersion": 3,
+  "scenarioSha256": "125345e226cc2795c7309a022eb3916bfc2a8d1eae75c209a9137810a587efa0"
+}

@@ -1,15 +1,20 @@
 {
   "schemaVersion": 1,
-  "osmiumVersion": null,
+  "osmiumVersion": "osmium version 1.16.0",
   "sources": [
     {
       "id": "karlsruhe",
       "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/karlsruhe-regbez-260915.osm.pbf",
       "sourceBytes": 154226606,
-      "sourceSha256": null,
-      "bbox": [8.392, 49.0, 8.414, 49.016],
+      "sourceSha256": "eb5ee520119ae289f72adc598e5bd63686a91edb2a98ba762e2e4311bedf13e2",
+      "bbox": [
+        8.392,
+        49.0,
+        8.414,
+        49.016
+      ],
       "extractPath": "fixtures/pages/osm/karlsruhe.osm.pbf",
-      "extractSha256": null,
+      "extractSha256": "51cfd4d298abd595bfb576cbcc546d9bcd80fefb1c011af151dfeffe94b1a3b7",
       "scenarioPath": "fixtures/pages/karlsruhe.json",
       "receiptPath": "fixtures/pages/osm/karlsruhe-receipt.json"
     },
@@ -17,10 +22,15 @@
       "id": "stuttgart",
       "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/stuttgart-regbez-260915.osm.pbf",
       "sourceBytes": 211147036,
-      "sourceSha256": null,
-      "bbox": [9.17, 48.765, 9.195, 48.783],
+      "sourceSha256": "849a86f9be012eba298277bcf0c79a4b7af589b32e942bed39ea2fa773b7241f",
+      "bbox": [
+        9.17,
+        48.765,
+        9.195,
+        48.783
+      ],
       "extractPath": "fixtures/pages/osm/stuttgart.osm.pbf",
-      "extractSha256": null,
+      "extractSha256": "1335b469f1270e4f5ebb04544a27c80c0c48d318402fba2dca1d8d0ed355fa8b",
       "scenarioPath": "fixtures/pages/stuttgart.json",
       "receiptPath": "fixtures/pages/osm/stuttgart-receipt.json"
     },
@@ -28,10 +38,15 @@
       "id": "pforzheim",
       "sourceUrl": "https://download.geofabrik.de/europe/germany/baden-wuerttemberg/karlsruhe-regbez-260915.osm.pbf",
       "sourceBytes": 154226606,
-      "sourceSha256": null,
-      "bbox": [8.689, 48.882, 8.711, 48.899],
+      "sourceSha256": "eb5ee520119ae289f72adc598e5bd63686a91edb2a98ba762e2e4311bedf13e2",
+      "bbox": [
+        8.689,
+        48.882,
+        8.711,
+        48.899
+      ],
       "extractPath": "fixtures/pages/osm/pforzheim.osm.pbf",
-      "extractSha256": null,
+      "extractSha256": "550ebb431a41f5b14af1951a0d662f60ea2055b1ba2dab35680a8a3e8ad4d99b",
       "scenarioPath": "fixtures/pages/pforzheim.json",
       "receiptPath": "fixtures/pages/osm/pforzheim-receipt.json"
     }
