@@ -7,6 +7,13 @@ import { createCityGameRuntime } from "./wasm.js";
 
 const DEFAULT_FRAME_ASPECT = 16 / 9;
 const SETTINGS_STORAGE_KEY = "city-game.settings.user.v1";
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 32;
+const MAX_PAN = 8;
+const ZOOM_FACTOR = 1.25;
+const KEYBOARD_PAN_STEP = 0.08;
+const DRAG_THRESHOLD_PX = 4;
+const OVERVIEW_VIEW = Object.freeze({ panX: 0, panY: 0, zoom: 1 });
 
 const APPEARANCE_DEFINITIONS = [
   {
@@ -62,11 +69,21 @@ const openScenarioButton = requiredElement("#open-scenario", HTMLButtonElement);
 const chooseScenarioButton = requiredElement("#choose-scenario", HTMLButtonElement);
 const cityTitle = requiredElement("#city-title", HTMLElement);
 const cityRegion = requiredElement("#city-region", HTMLElement);
+const overviewRoads = requiredElement("#overview-roads", HTMLElement);
+const overviewBuildings = requiredElement("#overview-buildings", HTMLElement);
+const overviewWater = requiredElement("#overview-water", HTMLElement);
+const overviewLandUse = requiredElement("#overview-land-use", HTMLElement);
 const selectionName = requiredElement("#selection-name", HTMLElement);
 const selectionKind = requiredElement("#selection-kind", HTMLElement);
 const selectionId = requiredElement("#selection-id", HTMLElement);
+const selectionExtra = requiredElement("#selection-extra", HTMLElement);
 const sceneModeLabel = requiredElement("#scene-mode", HTMLElement);
 const sceneHintLabel = requiredElement("#scene-hint", HTMLElement);
+const viewOverviewButton = requiredElement("#view-overview", HTMLButtonElement);
+const viewZoomOutButton = requiredElement("#view-zoom-out", HTMLButtonElement);
+const viewZoomInButton = requiredElement("#view-zoom-in", HTMLButtonElement);
+const viewFocusButton = requiredElement("#view-focus", HTMLButtonElement);
+const viewZoomLabel = requiredElement("#view-zoom", HTMLOutputElement);
 const settingsStatus = requiredElement("#settings-status", HTMLElement);
 const inputStatus = requiredElement("#input-status", HTMLElement);
 const statusLabel = requiredElement("#status", HTMLElement);
@@ -125,8 +142,12 @@ let currentScenario = null;
 let currentCanonicalScenario = null;
 let entityIndex = new Map();
 let selectedEntity = null;
+let cameraView = { ...OVERVIEW_VIEW };
 let loadGeneration = 0;
 let lastCanvasPointer = null;
+let pointerGesture = null;
+let pendingPan = { x: 0, y: 0 };
+let panAnimationFrame = null;
 let settingsSession = null;
 let inputController = null;
 let detachKeyboard = null;
@@ -221,7 +242,8 @@ async function selectScenario(scenario, updateUrl = true) {
   }
   const canonicalScenario = await response.json();
   const session = runtime.createSession(canonicalScenario);
-  const frame = validateRenderFrame(session.renderFrame(DEFAULT_FRAME_ASPECT));
+  const nextView = { ...OVERVIEW_VIEW };
+  const frame = validateRenderFrame(session.renderFrame(DEFAULT_FRAME_ASPECT, nextView));
   if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
     throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
   }
@@ -231,8 +253,11 @@ async function selectScenario(scenario, updateUrl = true) {
   currentCanonicalScenario = canonicalScenario;
   currentSession = session;
   currentFrame = frame;
+  cameraView = nextView;
   entityIndex = buildEntityIndex(canonicalScenario);
   setSelectedEntity(null);
+  updateOverview(canonicalScenario);
+  updateViewControls();
   canvas.style.aspectRatio = String(frame.camera.aspect);
   scenarioLabel.textContent = scenario.name;
   regionLabel.textContent = scenario.region;
@@ -243,12 +268,19 @@ async function selectScenario(scenario, updateUrl = true) {
   cityRegion.textContent = scenario.region;
   openScenarioButton.textContent = `Open ${scenario.name}`;
   openScenarioButton.disabled = false;
-  statusLabel.textContent = "Scenario ready. Open it to select existing objects.";
+  statusLabel.textContent = "Scenario ready. Open it to inspect the city.";
   for (const [id, button] of buttons) {
     button.setAttribute("aria-pressed", String(id === scenario.id));
   }
   if (updateUrl) updateLocation();
   render();
+}
+
+function updateOverview(scenario) {
+  overviewRoads.textContent = String(scenario.roads?.length ?? 0);
+  overviewBuildings.textContent = String(scenario.buildings?.length ?? 0);
+  overviewWater.textContent = String(scenario.water?.length ?? 0);
+  overviewLandUse.textContent = String(scenario.landUseAreas?.length ?? 0);
 }
 
 function setMode(mode, updateUrl = true) {
@@ -261,15 +293,16 @@ function setMode(mode, updateUrl = true) {
   cityPanel.hidden = mode !== "city";
   if (mode === "picker") {
     setSelectedEntity(null);
+    resetView(false);
     sceneModeLabel.textContent = "Scenario preview";
-    sceneHintLabel.textContent = "Choose a city, then open it to select existing objects.";
+    sceneHintLabel.textContent = "Choose a city, then open it to inspect and navigate.";
     canvas.setAttribute("aria-label", "Scenario preview");
     statusLabel.textContent = "Choose a scenario to preview or open.";
   } else {
-    sceneModeLabel.textContent = "Selection mode";
-    sceneHintLabel.textContent = "Click an existing object to select it. Esc clears the selection.";
-    canvas.setAttribute("aria-label", `Select existing objects in ${currentScenario.name}`);
-    statusLabel.textContent = "Selection mode active. City state remains unchanged.";
+    sceneModeLabel.textContent = "Inspect & navigate";
+    sceneHintLabel.textContent = "Click to inspect · drag to move · wheel to zoom · Home for overview · F focuses selection";
+    canvas.setAttribute("aria-label", `Inspect and navigate ${currentScenario.name}`);
+    statusLabel.textContent = "Inspection mode active. City state remains unchanged.";
     canvas.focus({ preventScroll: true });
   }
   if (updateUrl) updateLocation();
@@ -317,6 +350,8 @@ function entityIdForNode(nodeId) {
 
 function setSelectedEntity(selection) {
   selectedEntity = selection;
+  viewFocusButton.disabled = !selection;
+  selectionExtra.replaceChildren();
   if (!selection) {
     selectionName.textContent = "Nothing";
     selectionKind.textContent = "—";
@@ -325,8 +360,45 @@ function setSelectedEntity(selection) {
     selectionName.textContent = entityDisplayName(selection);
     selectionKind.textContent = selection.kind;
     selectionId.textContent = selection.id;
+    renderSelectionDetails(selection);
   }
   render();
+}
+
+function renderSelectionDetails(selection) {
+  const entity = selection.entity ?? {};
+  const rows = [];
+  if (selection.kind === "Road") {
+    rows.push(["Class", titleCase(entity.class ?? "unknown")]);
+    rows.push(["Lanes", entity.lanes ?? "—"]);
+    rows.push(["Speed", Number.isFinite(entity.maxSpeedKph) ? `${entity.maxSpeedKph} km/h` : "—"]);
+  } else if (selection.kind === "Building") {
+    rows.push(["Use", titleCase(entity.useKind ?? "unknown")]);
+    rows.push(["Levels", entity.levels ?? "—"]);
+    rows.push(["Height", Number.isFinite(entity.heightM) ? `${entity.heightM} m` : "derived from levels"]);
+    rows.push([
+      "Floor area",
+      Number.isFinite(entity.grossFloorAreaM2) ? `${formatNumber(entity.grossFloorAreaM2)} m²` : "—",
+    ]);
+  } else if (selection.kind === "Land use") {
+    rows.push(["Use", titleCase(entity.kind ?? "unknown")]);
+  } else if (selection.kind === "Water") {
+    rows.push(["Kind", titleCase(entity.kind ?? "water")]);
+  }
+  const geometry = entity.geometry ?? entity.footprint;
+  if (geometry?.type) rows.push(["Geometry", geometry.type]);
+  if (entity.sourceId) rows.push(["Source", entity.sourceId, true]);
+
+  for (const [label, value, monospace = false] of rows) {
+    const row = document.createElement("div");
+    const term = document.createElement("dt");
+    const detail = document.createElement("dd");
+    term.textContent = label;
+    detail.textContent = String(value);
+    if (monospace) detail.dataset.monospace = "true";
+    row.append(term, detail);
+    selectionExtra.append(row);
+  }
 }
 
 function entityDisplayName(selection) {
@@ -342,18 +414,113 @@ function entityDisplayName(selection) {
 }
 
 function titleCase(value) {
-  return value.length === 0 ? value : value[0].toUpperCase() + value.slice(1).replaceAll("_", " ");
+  const text = String(value ?? "");
+  return text.length === 0 ? text : text[0].toUpperCase() + text.slice(1).replaceAll("_", " ");
 }
 
-function pickAtLastPointer() {
-  if (appMode !== "city" || !currentFrame || !lastCanvasPointer) return;
-  const node = pickNode(currentFrame, lastCanvasPointer);
+function formatNumber(value) {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(value);
+}
+
+function refreshFrame() {
+  if (!currentSession) return;
+  const frame = validateRenderFrame(currentSession.renderFrame(DEFAULT_FRAME_ASPECT, cameraView));
+  if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
+    throw new Error("inspection frame must declare a finite positive camera aspect");
+  }
+  currentFrame = frame;
+  updateViewControls();
+  render();
+}
+
+function setCameraView(nextView, status) {
+  if (!currentSession) return;
+  cameraView = {
+    panX: clamp(Number(nextView.panX), -MAX_PAN, MAX_PAN),
+    panY: clamp(Number(nextView.panY), -MAX_PAN, MAX_PAN),
+    zoom: clamp(Number(nextView.zoom), MIN_ZOOM, MAX_ZOOM),
+  };
+  refreshFrame();
+  if (status) statusLabel.textContent = status;
+}
+
+function resetView(announce = true) {
+  setCameraView(
+    OVERVIEW_VIEW,
+    announce ? "Overview restored. Inspection remains read-only." : undefined,
+  );
+}
+
+function zoomBy(factor, announce = true) {
+  const nextZoom = clamp(cameraView.zoom * factor, MIN_ZOOM, MAX_ZOOM);
+  setCameraView(
+    { ...cameraView, zoom: nextZoom },
+    announce ? `Zoom ${nextZoom.toFixed(2)}×` : undefined,
+  );
+}
+
+function panBy(deltaX, deltaY, announce = false) {
+  setCameraView(
+    {
+      ...cameraView,
+      panX: cameraView.panX + deltaX,
+      panY: cameraView.panY + deltaY,
+    },
+    announce ? "View moved." : undefined,
+  );
+}
+
+function updateViewControls() {
+  viewZoomLabel.value = `${cameraView.zoom.toFixed(2)}×`;
+  viewZoomLabel.textContent = viewZoomLabel.value;
+  viewZoomOutButton.disabled = cameraView.zoom <= MIN_ZOOM + Number.EPSILON;
+  viewZoomInButton.disabled = cameraView.zoom >= MAX_ZOOM - Number.EPSILON;
+  viewFocusButton.disabled = !selectedEntity;
+}
+
+function focusSelection() {
+  if (!selectedEntity || !currentFrame) return;
+  const rect = canvas.getBoundingClientRect();
+  const bounds = selectedScreenBounds(rect.width, rect.height);
+  if (!bounds) return;
+
+  const centerX = (bounds.minX + bounds.maxX) * 0.5;
+  const centerY = (bounds.minY + bounds.maxY) * 0.5;
+  const nextPanX = cameraView.panX + (centerX / rect.width - 0.5) / cameraView.zoom;
+  const nextPanY = cameraView.panY + (0.5 - centerY / rect.height) / cameraView.zoom;
+  const nextZoom = Math.max(cameraView.zoom, 4);
+  setCameraView(
+    { panX: nextPanX, panY: nextPanY, zoom: nextZoom },
+    `Focused ${entityDisplayName(selectedEntity)} at ${nextZoom.toFixed(2)}×.`,
+  );
+}
+
+function selectedScreenBounds(width, height) {
+  const matches = currentFrame.nodes.filter((node) => entityIdForNode(node.id) === selectedEntity.id);
+  const bounds = matches
+    .map((node) => projectNodeBounds(currentFrame.camera, node, width, height))
+    .filter(Boolean);
+  if (bounds.length === 0) return null;
+  return {
+    minX: Math.min(...bounds.map((entry) => entry.minX)),
+    maxX: Math.max(...bounds.map((entry) => entry.maxX)),
+    minY: Math.min(...bounds.map((entry) => entry.minY)),
+    maxY: Math.max(...bounds.map((entry) => entry.maxY)),
+  };
+}
+
+function pickAtPointer(pointer) {
+  if (appMode !== "city" || !currentFrame || !pointer) return;
+  const node = pickNode(currentFrame, pointer);
   if (!node) {
     setSelectedEntity(null);
+    statusLabel.textContent = "Selection cleared.";
     return;
   }
   const entityId = entityIdForNode(node.id);
-  setSelectedEntity(entityIndex.get(entityId) ?? { id: entityId, kind: "Object", entity: {} });
+  const selection = entityIndex.get(entityId) ?? { id: entityId, kind: "Object", entity: {} };
+  setSelectedEntity(selection);
+  statusLabel.textContent = `Inspecting ${entityDisplayName(selection)}.`;
 }
 
 function pickNode(frame, pointer) {
@@ -417,7 +584,10 @@ function transformNodePoint(node, point) {
   const transform = node.transform;
   const scale = transform.scale ?? [1, 1, 1];
   const scaled = point.map((value, index) => value * scale[index]);
-  const rotated = rotateQuaternion(scaled, normalizeQuaternion(transform.rotationQuaternion ?? [0, 0, 0, 1]));
+  const rotated = rotateQuaternion(
+    scaled,
+    normalizeQuaternion(transform.rotationQuaternion ?? [0, 0, 0, 1]),
+  );
   return rotated.map((value, index) => value + transform.translation[index]);
 }
 
@@ -448,6 +618,11 @@ function rotateQuaternion([x, y, z], [qx, qy, qz, qw]) {
   ];
 }
 
+function clamp(value, minimum, maximum) {
+  if (!Number.isFinite(value)) return minimum;
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 async function initializeSettings() {
   const module = await settingsModulePromise;
   if (module.foundationLoadError) throw module.foundationLoadError;
@@ -473,10 +648,18 @@ async function initializeSettings() {
   applySettingsAppearance();
   settingsStatus.textContent = `Shared settings active${persistenceNote}`;
 
-  colorSchemeControl.addEventListener("change", () => setChoiceSetting("appearance.color_scheme", colorSchemeControl.value));
-  contrastControl.addEventListener("change", () => setChoiceSetting("appearance.contrast", contrastControl.value));
-  colorVisionControl.addEventListener("change", () => setChoiceSetting("appearance.color_vision", colorVisionControl.value));
-  nightModeControl.addEventListener("change", () => setBoolSetting("appearance.night_mode", nightModeControl.checked));
+  colorSchemeControl.addEventListener("change", () =>
+    setChoiceSetting("appearance.color_scheme", colorSchemeControl.value),
+  );
+  contrastControl.addEventListener("change", () =>
+    setChoiceSetting("appearance.contrast", contrastControl.value),
+  );
+  colorVisionControl.addEventListener("change", () =>
+    setChoiceSetting("appearance.color_vision", colorVisionControl.value),
+  );
+  nightModeControl.addEventListener("change", () =>
+    setBoolSetting("appearance.night_mode", nightModeControl.checked),
+  );
 }
 
 function syncSettingsControls() {
@@ -530,7 +713,12 @@ function applySettingsAppearance() {
   const colorVision = requireSettingValue(values, "appearance.color_vision", "choice");
   const nightMode = requireSettingValue(values, "appearance.night_mode", "bool");
   const next = {
-    colorScheme: colorSchemePreference === "system" ? (systemColorScheme.matches ? "dark" : "light") : colorSchemePreference,
+    colorScheme:
+      colorSchemePreference === "system"
+        ? systemColorScheme.matches
+          ? "dark"
+          : "light"
+        : colorSchemePreference,
     contrast: contrastPreference === "system" ? resolveSystemContrast() : contrastPreference,
     colorVision,
     nightMode,
@@ -610,15 +798,27 @@ async function initializeInputBindings() {
     ignoreTextEntry: true,
     stopPropagation: false,
   });
-  inputStatus.textContent = "Shared input bindings active · ↑/↓ choose · Enter open · click select · Esc clear/back";
+  inputStatus.textContent =
+    "Shared input bindings active · arrows move · wheel/+/− zoom · Home overview · F focus · Esc clear/back";
 }
 
 function cityInputRegistry() {
   const context = (id) => ({ op: "context", id });
-  const logical = (id, action, value, when) => ({
+  const logical = (id, action, value, when, modifiers) => ({
     id,
     action,
-    sequence: [{ key: { kind: "logical", value } }],
+    sequence: [
+      {
+        key: { kind: "logical", value },
+        ...(modifiers ? { modifiers } : {}),
+      },
+    ],
+    when,
+  });
+  const wheel = (id, action, direction, when) => ({
+    id,
+    action,
+    sequence: [{ device: "wheel", direction }],
     when,
   });
   return {
@@ -650,16 +850,69 @@ function cityInputRegistry() {
         defaults: [logical("city.scenario.open.enter", "city.scenario.open", "Enter", context("scenarioPicker"))],
       },
       {
-        id: "city.selection.pick",
-        title: "Select object",
-        allowedDevices: ["mouse"],
+        id: "city.view.panLeft",
+        title: "Move view left",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard"],
+        defaults: [logical("city.view.pan-left.arrow", "city.view.panLeft", "ArrowLeft", context("cityView"))],
+      },
+      {
+        id: "city.view.panRight",
+        title: "Move view right",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard"],
+        defaults: [logical("city.view.pan-right.arrow", "city.view.panRight", "ArrowRight", context("cityView"))],
+      },
+      {
+        id: "city.view.panUp",
+        title: "Move view up",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard"],
+        defaults: [logical("city.view.pan-up.arrow", "city.view.panUp", "ArrowUp", context("cityView"))],
+      },
+      {
+        id: "city.view.panDown",
+        title: "Move view down",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard"],
+        defaults: [logical("city.view.pan-down.arrow", "city.view.panDown", "ArrowDown", context("cityView"))],
+      },
+      {
+        id: "city.view.zoomIn",
+        title: "Zoom in",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard", "mouse"],
         defaults: [
-          {
-            id: "city.selection.pick.primary",
-            action: "city.selection.pick",
-            sequence: [{ device: "mouseButton", button: 0 }],
-            when: context("cityView"),
-          },
+          logical("city.view.zoom-in.equal", "city.view.zoomIn", "=", context("cityView")),
+          logical("city.view.zoom-in.plus", "city.view.zoomIn", "+", context("cityView"), { shift: true }),
+          wheel("city.view.zoom-in.wheel", "city.view.zoomIn", "up", context("cityView")),
+        ],
+      },
+      {
+        id: "city.view.zoomOut",
+        title: "Zoom out",
+        repeatPolicy: "allow",
+        allowedDevices: ["keyboard", "mouse"],
+        defaults: [
+          logical("city.view.zoom-out.minus", "city.view.zoomOut", "-", context("cityView")),
+          wheel("city.view.zoom-out.wheel", "city.view.zoomOut", "down", context("cityView")),
+        ],
+      },
+      {
+        id: "city.view.overview",
+        title: "Restore overview",
+        allowedDevices: ["keyboard"],
+        defaults: [
+          logical("city.view.overview.home", "city.view.overview", "Home", context("cityView")),
+          logical("city.view.overview.zero", "city.view.overview", "0", context("cityView")),
+        ],
+      },
+      {
+        id: "city.view.focusSelection",
+        title: "Focus selected object",
+        allowedDevices: ["keyboard"],
+        defaults: [
+          logical("city.view.focus-selection.f", "city.view.focusSelection", "f", context("selectionExists")),
         ],
       },
       {
@@ -691,6 +944,7 @@ function activeInputContexts() {
 
 function handleInputDispatch(dispatch) {
   if (dispatch.phase === "release") return;
+  const panStep = KEYBOARD_PAN_STEP / cameraView.zoom;
   switch (dispatch.action) {
     case "city.scenario.previous":
       selectScenarioByOffset(-1).catch(reportInteractionError);
@@ -701,11 +955,33 @@ function handleInputDispatch(dispatch) {
     case "city.scenario.open":
       setMode("city");
       break;
-    case "city.selection.pick":
-      pickAtLastPointer();
+    case "city.view.panLeft":
+      panBy(-panStep, 0);
+      break;
+    case "city.view.panRight":
+      panBy(panStep, 0);
+      break;
+    case "city.view.panUp":
+      panBy(0, panStep);
+      break;
+    case "city.view.panDown":
+      panBy(0, -panStep);
+      break;
+    case "city.view.zoomIn":
+      zoomBy(ZOOM_FACTOR, false);
+      break;
+    case "city.view.zoomOut":
+      zoomBy(1 / ZOOM_FACTOR, false);
+      break;
+    case "city.view.overview":
+      resetView();
+      break;
+    case "city.view.focusSelection":
+      focusSelection();
       break;
     case "city.selection.clear":
       setSelectedEntity(null);
+      statusLabel.textContent = "Selection cleared.";
       break;
     case "city.scenario.choose":
       setMode("picker");
@@ -727,6 +1003,38 @@ function requiredElement(selector, constructor) {
   return element;
 }
 
+function canvasPointer(event) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top,
+    width: rect.width,
+    height: rect.height,
+  };
+}
+
+function queuePan(deltaX, deltaY) {
+  pendingPan.x += deltaX;
+  pendingPan.y += deltaY;
+  if (panAnimationFrame !== null) return;
+  panAnimationFrame = requestAnimationFrame(() => {
+    panAnimationFrame = null;
+    const delta = pendingPan;
+    pendingPan = { x: 0, y: 0 };
+    if (delta.x !== 0 || delta.y !== 0) panBy(delta.x, delta.y);
+  });
+}
+
+function flushQueuedPan() {
+  if (panAnimationFrame !== null) {
+    cancelAnimationFrame(panAnimationFrame);
+    panAnimationFrame = null;
+  }
+  const delta = pendingPan;
+  pendingPan = { x: 0, y: 0 };
+  if (delta.x !== 0 || delta.y !== 0) panBy(delta.x, delta.y);
+}
+
 for (const scenario of scenarios.values()) {
   const button = document.createElement("button");
   button.type = "button";
@@ -746,14 +1054,69 @@ for (const scenario of scenarios.values()) {
 
 openScenarioButton.addEventListener("click", () => setMode("city"));
 chooseScenarioButton.addEventListener("click", () => setMode("picker"));
-canvas.addEventListener("mousedown", (event) => {
-  const rect = canvas.getBoundingClientRect();
-  lastCanvasPointer = {
-    x: event.clientX - rect.left,
-    y: event.clientY - rect.top,
-    width: rect.width,
-    height: rect.height,
+viewOverviewButton.addEventListener("click", () => resetView());
+viewZoomInButton.addEventListener("click", () => zoomBy(ZOOM_FACTOR));
+viewZoomOutButton.addEventListener("click", () => zoomBy(1 / ZOOM_FACTOR));
+viewFocusButton.addEventListener("click", focusSelection);
+
+canvas.addEventListener("pointerdown", (event) => {
+  if (appMode !== "city" || event.button !== 0) return;
+  const pointer = canvasPointer(event);
+  lastCanvasPointer = pointer;
+  pointerGesture = {
+    pointerId: event.pointerId,
+    startX: pointer.x,
+    startY: pointer.y,
+    lastX: pointer.x,
+    lastY: pointer.y,
+    dragging: false,
   };
+  canvas.setPointerCapture(event.pointerId);
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  const pointer = canvasPointer(event);
+  lastCanvasPointer = pointer;
+  if (!pointerGesture || pointerGesture.pointerId !== event.pointerId || appMode !== "city") return;
+
+  const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);
+  if (!pointerGesture.dragging && totalDistance >= DRAG_THRESHOLD_PX) {
+    pointerGesture.dragging = true;
+    canvas.dataset.dragging = "true";
+  }
+  if (!pointerGesture.dragging) return;
+
+  const deltaX = pointer.x - pointerGesture.lastX;
+  const deltaY = pointer.y - pointerGesture.lastY;
+  pointerGesture.lastX = pointer.x;
+  pointerGesture.lastY = pointer.y;
+  queuePan(
+    -deltaX / Math.max(1, pointer.width) / cameraView.zoom,
+    deltaY / Math.max(1, pointer.height) / cameraView.zoom,
+  );
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  if (!pointerGesture || pointerGesture.pointerId !== event.pointerId) return;
+  const pointer = canvasPointer(event);
+  lastCanvasPointer = pointer;
+  const wasDragging = pointerGesture.dragging;
+  pointerGesture = null;
+  delete canvas.dataset.dragging;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  flushQueuedPan();
+  if (!wasDragging) pickAtPointer(pointer);
+});
+
+canvas.addEventListener("pointercancel", (event) => {
+  if (!pointerGesture || pointerGesture.pointerId !== event.pointerId) return;
+  pointerGesture = null;
+  delete canvas.dataset.dragging;
+  pendingPan = { x: 0, y: 0 };
+  if (panAnimationFrame !== null) {
+    cancelAnimationFrame(panAnimationFrame);
+    panAnimationFrame = null;
+  }
 });
 
 systemColorScheme.addEventListener("change", systemAppearanceChanged);
@@ -784,6 +1147,7 @@ window.addEventListener("pagehide", () => {
   inputController?.reset("pagehide");
   detachKeyboard?.();
   detachMouse?.();
+  if (panAnimationFrame !== null) cancelAnimationFrame(panAnimationFrame);
   observer.disconnect();
   renderer.dispose();
 });
