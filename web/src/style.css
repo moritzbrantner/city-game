@@ -38,17 +38,19 @@ html, body { margin: 0; min-height: 100%; }
 html { background: var(--page); }
 body { min-height: 100vh; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: var(--page); color: var(--text); }
 button, select, input { font: inherit; }
-main { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 430px); }
+main { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1fr) minmax(350px, 450px); }
 .scene { position: relative; min-height: 70vh; display: grid; align-items: center; overflow: hidden; background: var(--scene); }
 canvas { display: block; width: 100%; height: auto; touch-action: none; outline: none; }
-body[data-mode="city"] canvas { cursor: pointer; }
+body[data-mode="city"] canvas { cursor: grab; }
+body[data-mode="city"] canvas[data-dragging="true"] { cursor: grabbing; }
 canvas:focus-visible { outline: 3px solid var(--text); outline-offset: -5px; }
-.scene-mode { position: absolute; left: clamp(1rem, 2vw, 2rem); bottom: clamp(1rem, 2vw, 2rem); display: grid; gap: .2rem; max-width: min(32rem, calc(100% - 2rem)); padding: .7rem .85rem; background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
+.scene-mode { position: absolute; left: clamp(1rem, 2vw, 2rem); bottom: clamp(1rem, 2vw, 2rem); display: grid; gap: .2rem; max-width: min(36rem, calc(100% - 2rem)); padding: .7rem .85rem; background: var(--panel); border: 1px solid var(--line); pointer-events: none; }
 .scene-mode strong { font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; }
 .scene-mode span { color: var(--muted); font-size: .82rem; line-height: 1.35; }
 aside { padding: clamp(2rem, 5vw, 4.5rem); align-self: center; background: var(--panel); }
 .eyebrow { margin: 0 0 .75rem; font-size: .75rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 h1 { margin: 0 0 1.25rem; max-width: 12ch; font-size: clamp(2.3rem, 5vw, 4.8rem); line-height: .95; font-weight: 750; letter-spacing: -.045em; }
+h2.section-heading { margin: 1.6rem 0 .35rem; font-size: 1rem; letter-spacing: .02em; }
 p { line-height: 1.65; }
 code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
 .city-region { margin-top: -.65rem; color: var(--muted); }
@@ -59,17 +61,28 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .scenario-option span { font-size: .88rem; color: var(--muted); }
 .scenario-option[aria-pressed="true"] strong { color: var(--accent); }
 .scenario-option[aria-pressed="true"] strong::before { content: "→ "; }
-.scenario-option:focus-visible, .primary-action:focus-visible, .secondary-action:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+.scenario-option:focus-visible, .primary-action:focus-visible, .secondary-action:focus-visible, .view-controls button:focus-visible, summary:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
 .scenario-description { min-height: 3.3em; margin: 1rem 0 0; color: var(--muted); }
 dl { margin: 1.5rem 0 0; border-top: 1px solid var(--line); }
 dl div { display: grid; grid-template-columns: 1fr 1.35fr; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 dt { font-weight: 650; }
 dd { margin: 0; overflow-wrap: anywhere; }
 .selection-details div:last-child dd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }
+.compact-details { margin-top: .65rem; }
+.compact-details div { padding: .55rem 0; font-size: .88rem; }
+.selection-extra:empty { display: none; }
+.selection-extra dd[data-monospace="true"] { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }
 .primary-action, .secondary-action { width: 100%; margin-top: 1.2rem; padding: .85rem 1rem; border: 1px solid var(--line); cursor: pointer; }
 .primary-action { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 .secondary-action { background: var(--control); color: var(--text); }
 .primary-action:disabled { opacity: .5; cursor: wait; }
+.view-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1.25fr); gap: .45rem; margin: 1.25rem 0 0; align-items: stretch; }
+.view-controls button, .view-controls output { min-height: 2.55rem; border: 1px solid var(--line); background: var(--control); color: var(--text); }
+.view-controls button { padding: .55rem .7rem; cursor: pointer; }
+.view-controls button:disabled { opacity: .48; cursor: default; }
+.view-controls output { display: grid; place-items: center; min-width: 4.8rem; padding: .45rem .55rem; font-variant-numeric: tabular-nums; }
+.overview-panel { margin-top: 1.2rem; border-top: 1px solid var(--line); padding-top: .8rem; }
+.overview-panel summary { cursor: pointer; font-weight: 700; }
 .settings-panel { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .settings-panel summary { cursor: pointer; font-weight: 700; }
 .settings-grid { display: grid; gap: .85rem; margin-top: 1rem; }
@@ -81,7 +94,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .checkbox-setting input { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
 .foundation-statuses { margin-top: 1.4rem; border-top: 1px solid var(--line); padding-top: .8rem; }
 .foundation-status, .status { margin: .45rem 0 0; color: var(--muted); font-size: .82rem; line-height: 1.45; }
-:root[data-contrast="high"] .scenario-option, :root[data-contrast="high"] dl, :root[data-contrast="high"] dl div, :root[data-contrast="high"] .settings-panel, :root[data-contrast="high"] .scene-mode, :root[data-contrast="high"] button, :root[data-contrast="high"] select { border-width: 2px; }
+:root[data-contrast="high"] .scenario-option, :root[data-contrast="high"] dl, :root[data-contrast="high"] dl div, :root[data-contrast="high"] .settings-panel, :root[data-contrast="high"] .overview-panel, :root[data-contrast="high"] .scene-mode, :root[data-contrast="high"] button, :root[data-contrast="high"] select, :root[data-contrast="high"] output { border-width: 2px; }
+@media (max-width: 950px) {
+  .view-controls { grid-template-columns: 1fr auto auto auto; }
+  .view-controls #view-focus { grid-column: 1 / -1; }
+}
 @media (max-width: 760px) {
   main { grid-template-columns: 1fr; }
   .scene { min-height: 56vh; order: 2; }
