@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>city-game</title>
     <link rel="stylesheet" href="./style.css" />
+    <link rel="stylesheet" href="./enhancements.css" />
     <script type="importmap">
       {
         "imports": {
@@ -14,7 +15,7 @@
       }
     </script>
   </head>
-  <body data-mode="picker">
+  <body data-mode="picker" data-selection="none">
     <main>
       <section class="scene" aria-label="City scenario view">
         <canvas id="scene" tabindex="0" aria-label="Scenario preview"></canvas>
@@ -36,8 +37,8 @@
         <section id="scenario-panel" class="menu-view">
           <h1>Choose a city to explore</h1>
           <p class="lede">
-            Select a real-world snapshot, preview it, then open the city for read-only inspection. Scenario selection stays
-            separate from simulation changes.
+            Select a real-world snapshot to preview it. Opening a city moves to its own stable scenario page for
+            read-only inspection; scenario selection stays separate from simulation changes.
           </p>
           <nav id="scenario-list" class="scenario-list" aria-label="Example city scenarios"></nav>
           <p id="scenario-description" class="scenario-description"></p>
@@ -158,6 +159,7 @@
         </p>
       </aside>
     </main>
+    <script type="module" src="./route.js"></script>
     <script type="module" src="./surface.js"></script>
     <script type="module" src="./main.js"></script>
   </body>
