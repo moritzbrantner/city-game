@@ -1,0 +1,77 @@
+name: Apply city view refinement
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/apply-city-view-refinement.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Apply focused camera and modifier-drag patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one match in {path}, found {count}: {old!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "crates/city-game-core/src/render.rs",
+              "    let eye = Vec3::new(eye_distance, eye_distance * 1.35, eye_distance);",
+              "    let eye = Vec3::new(eye_distance, eye_distance, eye_distance);",
+          )
+          replace_once(
+              "web/src/main.js",
+              '    sceneModeLabel.textContent = "Inspect & navigate";',
+              '    sceneModeLabel.textContent = "Isometric inspection";',
+          )
+          replace_once(
+              "web/src/main.js",
+              '    sceneHintLabel.textContent = "Click to inspect · drag to move · wheel to zoom · Home for overview · F focuses selection";',
+              '    sceneHintLabel.textContent = "Click to inspect · Shift + drag to move · wheel to zoom · Home for overview · F focuses selection";',
+          )
+          replace_once(
+              "web/src/main.js",
+              '  inputStatus.textContent =\n    "Shared input bindings active · arrows move · wheel/+/− zoom · Home overview · F focus · Esc clear/back";',
+              '  inputStatus.textContent =\n    "Shared input bindings active · Shift + drag/arrows move · wheel/+/− zoom · Home overview · F focus · Esc clear/back";',
+          )
+          replace_once(
+              "web/src/main.js",
+              '  if (!pointerGesture || pointerGesture.pointerId !== event.pointerId || appMode !== "city") return;\n\n  const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);',
+              '  if (!pointerGesture || pointerGesture.pointerId !== event.pointerId || appMode !== "city") return;\n  if (!event.shiftKey) {\n    pointerGesture.lastX = pointer.x;\n    pointerGesture.lastY = pointer.y;\n    return;\n  }\n\n  const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);',
+          )
+          replace_once(
+              "web/src/main.js",
+              '  const wasDragging = pointerGesture.dragging;\n  pointerGesture = null;',
+              '  const totalDistance = Math.hypot(pointer.x - pointerGesture.startX, pointer.y - pointerGesture.startY);\n  const wasDragging = pointerGesture.dragging;\n  pointerGesture = null;',
+          )
+          replace_once(
+              "web/src/main.js",
+              '  if (!wasDragging) pickAtPointer(pointer);',
+              '  if (!wasDragging && totalDistance < DRAG_THRESHOLD_PX) pickAtPointer(pointer);',
+          )
+          PY
+      - name: Commit focused patch
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          git add crates/city-game-core/src/render.rs web/src/main.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Use isometric camera and modifier drag"
+          git push origin "HEAD:${BRANCH}"
