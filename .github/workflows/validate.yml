@@ -45,5 +45,23 @@ jobs:
       - name: Check browser WASM target
         run: cargo check --locked -p city-game-core --target wasm32-unknown-unknown
 
-      - name: Build deployable browser proof
-        run: bash scripts/build-pages.sh
+  build-pages:
+    name: Build or reuse deployable browser proof
+    needs: validate
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    uses: moritzbrantner/reusable-workflows/.github/workflows/build-artifact.yml@28a77d034ce18595e5f058f81e8063ea67d23bd9
+    with:
+      source_sha: ${{ github.event.pull_request.head.sha || github.sha }}
+      artifact_key: city-game-pages-v1
+      rust_toolchain: "1.98.0"
+      rust_targets: wasm32-unknown-unknown
+      bun_version: "1.3.14"
+      cache_bun: true
+      bun_cache_dependency_path: web/bun.lock
+      build_command: bash scripts/build-pages.sh
+      artifact_paths: web/dist
+      reuse_across_runs: true
+      artifact_retention_days: 7
