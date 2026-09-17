@@ -2,7 +2,9 @@ use std::str;
 
 use serde_json::json;
 
-use crate::browser_transport::{execute_json, new_save_json, query_json, render_frame_json};
+use crate::browser_transport::{
+    execute_json, new_save_json, query_json, render_frame_json, render_frame_with_view_json,
+};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_alloc(len: u32) -> u32 {
@@ -58,6 +60,24 @@ pub extern "C" fn city_game_render_frame(save_ptr: u32, save_len: u32, aspect: f
     let response = match read_input(save_ptr, save_len) {
         Ok(save) => render_frame_json(&save, aspect),
         Err(error) => error_response(&error),
+    };
+    write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_render_frame_view(
+    save_ptr: u32,
+    save_len: u32,
+    view_ptr: u32,
+    view_len: u32,
+    aspect: f32,
+) -> u64 {
+    let response = match (
+        read_input(save_ptr, save_len),
+        read_input(view_ptr, view_len),
+    ) {
+        (Ok(save), Ok(view)) => render_frame_with_view_json(&save, &view, aspect),
+        (Err(error), _) | (_, Err(error)) => error_response(&error),
     };
     write_output(response)
 }
