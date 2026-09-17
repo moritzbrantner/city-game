@@ -50,8 +50,9 @@ pub use population::{
 pub use progression::{ProgressionRule, ProgressionState, Requirement};
 pub use queries::{CityQueries, CityQuery, CityQueryError, CityQueryResult};
 pub use render::{
-    RendererCamera, RendererFrame, RendererGeometry, RendererSceneNode, RendererTransform,
-    THREE_D_LAB_REVISION, build_render_frame, build_save_render_frame,
+    RenderFrameError, RenderView, RenderViewError, RendererCamera, RendererFrame, RendererGeometry,
+    RendererSceneNode, RendererTransform, THREE_D_LAB_REVISION, build_render_frame,
+    build_render_frame_with_view, build_save_render_frame, build_save_render_frame_with_view,
 };
 pub use rules::{
     CityRuleset, PlanningRules, ProgressionRules, RULESET_SCHEMA_VERSION, RuleModule, RuleStatus,

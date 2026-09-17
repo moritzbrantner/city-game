@@ -1,7 +1,10 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
-use crate::{CityCommand, CityQuery, CitySave, CityScenario, build_save_render_frame};
+use crate::{
+    CityCommand, CityQuery, CitySave, CityScenario, RenderView, build_save_render_frame,
+    build_save_render_frame_with_view,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +47,17 @@ pub(crate) fn render_frame_json(save_json: &str, aspect: f32) -> String {
     encode_result((|| {
         let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
         let frame = build_save_render_frame(&save, aspect).map_err(|error| error.to_string())?;
+        Ok(json!({ "ok": true, "frame": frame }))
+    })())
+}
+
+pub(crate) fn render_frame_with_view_json(save_json: &str, view_json: &str, aspect: f32) -> String {
+    encode_result((|| {
+        let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
+        let view: RenderView =
+            serde_json::from_str(view_json).map_err(|error| error.to_string())?;
+        let frame = build_save_render_frame_with_view(&save, aspect, view)
+            .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "frame": frame }))
     })())
 }
@@ -144,6 +158,38 @@ mod tests {
         assert_eq!(response["ok"], true);
         assert!((aspect - f64::from(16.0_f32 / 9.0_f32)).abs() <= f64::EPSILON);
         assert!(response["frame"]["nodes"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn browser_transport_applies_read_only_inspection_view() {
+        let save = CitySave::new(scenario()).unwrap();
+        let save_json = serde_json::to_string(&save).unwrap();
+        let view_json = r#"{"panX":0.25,"panY":-0.125,"zoom":2.0}"#;
+
+        let response: Value = serde_json::from_str(&render_frame_with_view_json(
+            &save_json,
+            view_json,
+            16.0 / 9.0,
+        ))
+        .unwrap();
+
+        assert_eq!(response["ok"], true);
+        assert!(response["frame"]["camera"]["projectionMatrix"].is_array());
+    }
+
+    #[test]
+    fn browser_transport_rejects_invalid_inspection_view() {
+        let save = CitySave::new(scenario()).unwrap();
+        let save_json = serde_json::to_string(&save).unwrap();
+        let response: Value = serde_json::from_str(&render_frame_with_view_json(
+            &save_json,
+            r#"{"panX":0.0,"panY":0.0,"zoom":0.0}"#,
+            1.0,
+        ))
+        .unwrap();
+
+        assert_eq!(response["ok"], false);
+        assert!(response["error"].as_str().unwrap().contains("zoom"));
     }
 
     #[test]

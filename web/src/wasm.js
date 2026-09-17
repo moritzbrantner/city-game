@@ -1,6 +1,8 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+const OVERVIEW_VIEW = Object.freeze({ panX: 0, panY: 0, zoom: 1 });
+
 export async function createCityGameRuntime(url = "./city-game-core.wasm") {
   const response = await fetch(url);
   if (!response.ok) {
@@ -22,6 +24,7 @@ class CityGameRuntime {
       "city_game_execute",
       "city_game_query",
       "city_game_render_frame",
+      "city_game_render_frame_view",
     ];
     for (const name of required) {
       if (!(name in exports)) {
@@ -42,7 +45,7 @@ class CityGameRuntime {
         return commandResponse.outcome;
       },
       (query) => requireSuccess(this.#query(save, query)).result,
-      (aspect) => requireSuccess(this.#renderFrame(save, aspect)).frame,
+      (aspect, view) => requireSuccess(this.#renderFrame(save, aspect, view)).frame,
     );
   }
 
@@ -74,12 +77,23 @@ class CityGameRuntime {
     );
   }
 
-  #renderFrame(save, aspect) {
+  #renderFrame(save, aspect, view = OVERVIEW_VIEW) {
     if (!Number.isFinite(aspect) || aspect <= 0) {
       throw new Error("render aspect must be finite and positive");
     }
-    return this.#call([save], (input) =>
-      this.#exports.city_game_render_frame(input.ptr, input.len, aspect),
+    if (view === undefined || view === null) {
+      return this.#call([save], (input) =>
+        this.#exports.city_game_render_frame(input.ptr, input.len, aspect),
+      );
+    }
+    return this.#call([save, view], (saveInput, viewInput) =>
+      this.#exports.city_game_render_frame_view(
+        saveInput.ptr,
+        saveInput.len,
+        viewInput.ptr,
+        viewInput.len,
+        aspect,
+      ),
     );
   }
 
@@ -140,8 +154,8 @@ class CityGameSession {
     return this.#queryState(query);
   }
 
-  renderFrame(aspect) {
-    return this.#render(aspect);
+  renderFrame(aspect, view = OVERVIEW_VIEW) {
+    return this.#render(aspect, view);
   }
 }
 

@@ -88,4 +88,7 @@ grep -F 'city-game-core.wasm' web/dist/main.js >/dev/null
 grep -F '@moritzbrantner/settings-browser' web/dist/index.html >/dev/null
 grep -F '@moritzbrantner/input-bindings-browser' web/dist/index.html >/dev/null
 grep -F 'appearance.color_scheme' web/dist/main.js >/dev/null
-grep -F 'city.selection.pick' web/dist/main.js >/dev/null
+grep -F 'city.view.overview' web/dist/main.js >/dev/null
+grep -F 'city.view.zoomIn' web/dist/main.js >/dev/null
+grep -F 'Focus selected' web/dist/index.html >/dev/null
+grep -F 'City overview' web/dist/index.html >/dev/null

@@ -20,7 +20,7 @@
         <canvas id="scene" tabindex="0" aria-label="Scenario preview"></canvas>
         <div class="scene-mode" aria-live="polite">
           <strong id="scene-mode">Scenario preview</strong>
-          <span id="scene-hint">Choose a city, then open it to select existing objects.</span>
+          <span id="scene-hint">Choose a city, then open it to inspect and navigate.</span>
         </div>
       </section>
 
@@ -44,18 +44,39 @@
         </section>
 
         <section id="city-panel" hidden>
-          <p class="eyebrow">Selection mode</p>
+          <p class="eyebrow">Inspect &amp; navigate</p>
           <h1 id="city-title">City</h1>
           <p id="city-region" class="city-region"></p>
           <p>
-            Select an existing road, building, water area, or land-use area. Building, deleting, and changing the city are
-            intentionally not enabled in this slice.
+            Inspect the existing city without changing it. Drag the scene to move, use the wheel or zoom controls to
+            change scale, and select an object to see its canonical details.
           </p>
+
+          <div class="view-controls" aria-label="City view controls">
+            <button id="view-overview" type="button">Overview</button>
+            <button id="view-zoom-out" type="button" aria-label="Zoom out">−</button>
+            <output id="view-zoom" aria-label="Current zoom">1.00×</output>
+            <button id="view-zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button id="view-focus" type="button" disabled>Focus selected</button>
+          </div>
+
+          <details class="overview-panel" open>
+            <summary>City overview</summary>
+            <dl class="compact-details">
+              <div><dt>Roads</dt><dd id="overview-roads">—</dd></div>
+              <div><dt>Buildings</dt><dd id="overview-buildings">—</dd></div>
+              <div><dt>Water areas</dt><dd id="overview-water">—</dd></div>
+              <div><dt>Land-use areas</dt><dd id="overview-land-use">—</dd></div>
+            </dl>
+          </details>
+
+          <h2 class="section-heading">Inspection</h2>
           <dl class="selection-details">
             <div><dt>Selected</dt><dd id="selection-name">Nothing</dd></div>
             <div><dt>Type</dt><dd id="selection-kind">—</dd></div>
             <div><dt>ID</dt><dd id="selection-id">—</dd></div>
           </dl>
+          <dl id="selection-extra" class="compact-details selection-extra" aria-label="Selected object details"></dl>
           <button id="choose-scenario" class="secondary-action" type="button">Choose another city</button>
         </section>
 
