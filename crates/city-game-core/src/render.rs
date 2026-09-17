@@ -1,3 +1,5 @@
+use core::fmt;
+
 use geo_core::Geometry;
 use serde::{Deserialize, Serialize};
 use three_d_camera::{CameraError, OrthographicCamera};
@@ -9,6 +11,98 @@ pub const THREE_D_LAB_REVISION: &str = "6a18cb2d1fe9efdbae619c144b2180fdeb472172
 
 const MIN_VERTICAL_SPAN: f32 = 150.0;
 const FRAMING_PADDING: f32 = 1.1;
+const MIN_RENDER_ZOOM: f32 = 0.5;
+const MAX_RENDER_ZOOM: f32 = 32.0;
+const MAX_RENDER_PAN: f32 = 8.0;
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderView {
+    /// Horizontal viewport-center offset measured in fitted-overview widths.
+    pub pan_x: f32,
+    /// Vertical viewport-center offset measured in fitted-overview heights.
+    pub pan_y: f32,
+    /// Multiplicative zoom relative to the fitted overview. `1.0` is the overview.
+    pub zoom: f32,
+}
+
+impl RenderView {
+    #[must_use]
+    pub const fn overview() -> Self {
+        Self {
+            pan_x: 0.0,
+            pan_y: 0.0,
+            zoom: 1.0,
+        }
+    }
+
+    pub fn validate(self) -> Result<Self, RenderViewError> {
+        if !self.pan_x.is_finite() || !self.pan_y.is_finite() {
+            return Err(RenderViewError::NonFinitePan);
+        }
+        if self.pan_x.abs() > MAX_RENDER_PAN || self.pan_y.abs() > MAX_RENDER_PAN {
+            return Err(RenderViewError::PanOutOfRange);
+        }
+        if !self.zoom.is_finite() || !(MIN_RENDER_ZOOM..=MAX_RENDER_ZOOM).contains(&self.zoom) {
+            return Err(RenderViewError::ZoomOutOfRange);
+        }
+        Ok(self)
+    }
+}
+
+impl Default for RenderView {
+    fn default() -> Self {
+        Self::overview()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderViewError {
+    NonFinitePan,
+    PanOutOfRange,
+    ZoomOutOfRange,
+}
+
+impl fmt::Display for RenderViewError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NonFinitePan => formatter.write_str("render-view pan must be finite"),
+            Self::PanOutOfRange => formatter.write_str("render-view pan exceeds the supported inspection range"),
+            Self::ZoomOutOfRange => formatter.write_str("render-view zoom must be finite and between 0.5 and 32"),
+        }
+    }
+}
+
+impl std::error::Error for RenderViewError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderFrameError {
+    Camera(CameraError),
+    View(RenderViewError),
+}
+
+impl fmt::Display for RenderFrameError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Camera(error) => error.fmt(formatter),
+            Self::View(error) => error.fmt(formatter),
+        }
+    }
+}
+
+impl std::error::Error for RenderFrameError {}
+
+impl From<CameraError> for RenderFrameError {
+    fn from(error: CameraError) -> Self {
+        Self::Camera(error)
+    }
+}
+
+impl From<RenderViewError> for RenderFrameError {
+    fn from(error: RenderViewError) -> Self {
+        Self::View(error)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -123,6 +217,34 @@ pub fn build_render_frame(
     scenario: &CityScenario,
     aspect: f32,
 ) -> Result<RendererFrame, CameraError> {
+    let (nodes, fit_points) = scenario_render_parts(scenario);
+    finish_frame(nodes, fit_points, aspect)
+}
+
+pub fn build_render_frame_with_view(
+    scenario: &CityScenario,
+    aspect: f32,
+    view: RenderView,
+) -> Result<RendererFrame, RenderFrameError> {
+    let (nodes, fit_points) = scenario_render_parts(scenario);
+    finish_frame_with_view(nodes, fit_points, aspect, view)
+}
+
+pub fn build_save_render_frame(save: &CitySave, aspect: f32) -> Result<RendererFrame, CameraError> {
+    let (nodes, fit_points) = save_render_parts(save);
+    finish_frame(nodes, fit_points, aspect)
+}
+
+pub fn build_save_render_frame_with_view(
+    save: &CitySave,
+    aspect: f32,
+    view: RenderView,
+) -> Result<RendererFrame, RenderFrameError> {
+    let (nodes, fit_points) = save_render_parts(save);
+    finish_frame_with_view(nodes, fit_points, aspect, view)
+}
+
+fn scenario_render_parts(scenario: &CityScenario) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let projection = GameWorldProjection::from_scenario(scenario);
     let mut nodes = Vec::new();
     let mut fit_points = Vec::new();
@@ -165,10 +287,10 @@ pub fn build_render_frame(
         );
     }
 
-    finish_frame(nodes, fit_points, aspect)
+    (nodes, fit_points)
 }
 
-pub fn build_save_render_frame(save: &CitySave, aspect: f32) -> Result<RendererFrame, CameraError> {
+fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let projection = GameWorldProjection::from_save(save);
     let mut nodes = Vec::new();
     let mut fit_points = Vec::new();
@@ -233,7 +355,7 @@ pub fn build_save_render_frame(save: &CitySave, aspect: f32) -> Result<RendererF
         );
     }
 
-    finish_frame(nodes, fit_points, aspect)
+    (nodes, fit_points)
 }
 
 fn finish_frame(
@@ -246,14 +368,62 @@ fn finish_frame(
     }
     nodes.sort_by(|left, right| left.id.cmp(&right.id));
     let camera = fit_orthographic_camera(&fit_points, aspect)?;
-    Ok(RendererFrame {
+    Ok(renderer_frame(nodes, camera, aspect))
+}
+
+fn finish_frame_with_view(
+    mut nodes: Vec<RendererSceneNode>,
+    fit_points: Vec<Vec3>,
+    aspect: f32,
+    view: RenderView,
+) -> Result<RendererFrame, RenderFrameError> {
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return Err(CameraError::InvalidAspect.into());
+    }
+    let view = view.validate()?;
+    nodes.sort_by(|left, right| left.id.cmp(&right.id));
+    let overview = fit_orthographic_camera(&fit_points, aspect)?;
+    let camera = apply_render_view(overview, view)?;
+    Ok(renderer_frame(nodes, camera, aspect))
+}
+
+fn renderer_frame(
+    nodes: Vec<RendererSceneNode>,
+    camera: OrthographicCamera,
+    aspect: f32,
+) -> RendererFrame {
+    RendererFrame {
         camera: RendererCamera {
             aspect,
             view_matrix: camera.view_matrix().elements,
             projection_matrix: camera.projection_matrix().elements,
         },
         nodes,
-    })
+    }
+}
+
+fn apply_render_view(
+    overview: OrthographicCamera,
+    view: RenderView,
+) -> Result<OrthographicCamera, CameraError> {
+    let width = overview.right - overview.left;
+    let height = overview.top - overview.bottom;
+    let center_x = (overview.left + overview.right) * 0.5 + view.pan_x * width;
+    let center_y = (overview.bottom + overview.top) * 0.5 + view.pan_y * height;
+    let half_width = width * 0.5 / view.zoom;
+    let half_height = height * 0.5 / view.zoom;
+
+    OrthographicCamera::new(
+        overview.eye,
+        overview.target,
+        overview.up,
+        center_x - half_width,
+        center_x + half_width,
+        center_y - half_height,
+        center_y + half_height,
+        overview.near,
+        overview.far,
+    )
 }
 
 fn fit_orthographic_camera(
@@ -700,6 +870,56 @@ mod tests {
         assert!(json["camera"]["viewMatrix"].is_array());
         assert!(json["camera"]["projectionMatrix"].is_array());
         assert_eq!(json["nodes"][0]["geometry"]["kind"], "box");
+    }
+
+    #[test]
+    fn default_inspection_view_is_byte_for_byte_the_fitted_overview() {
+        let scenario = scenario();
+        let overview = build_render_frame(&scenario, 16.0 / 9.0).unwrap();
+        let inspected = build_render_frame_with_view(
+            &scenario,
+            16.0 / 9.0,
+            RenderView::overview(),
+        )
+        .unwrap();
+        assert_eq!(overview, inspected);
+    }
+
+    #[test]
+    fn inspection_view_changes_only_camera_projection() {
+        let scenario = scenario();
+        let overview = build_render_frame(&scenario, 1.0).unwrap();
+        let inspected = build_render_frame_with_view(
+            &scenario,
+            1.0,
+            RenderView {
+                pan_x: 0.25,
+                pan_y: -0.125,
+                zoom: 2.0,
+            },
+        )
+        .unwrap();
+        assert_eq!(overview.nodes, inspected.nodes);
+        assert_eq!(overview.camera.view_matrix, inspected.camera.view_matrix);
+        assert_ne!(overview.camera.projection_matrix, inspected.camera.projection_matrix);
+        assert!((inspected.camera.projection_matrix[0] - overview.camera.projection_matrix[0] * 2.0).abs() < 1.0e-5);
+        assert!((inspected.camera.projection_matrix[5] - overview.camera.projection_matrix[5] * 2.0).abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn invalid_inspection_view_fails_closed() {
+        assert_eq!(
+            build_render_frame_with_view(
+                &scenario(),
+                1.0,
+                RenderView {
+                    pan_x: 0.0,
+                    pan_y: 0.0,
+                    zoom: 0.0,
+                },
+            ),
+            Err(RenderFrameError::View(RenderViewError::ZoomOutOfRange))
+        );
     }
 
     #[test]
