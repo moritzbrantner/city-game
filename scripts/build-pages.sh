@@ -13,7 +13,6 @@ python3 - <<'PY'
 import json
 import pathlib
 import re
-import shutil
 import subprocess
 
 manifest_path = pathlib.Path("fixtures/pages/manifest.json")
@@ -34,11 +33,14 @@ for scenario in manifest.get("scenarios", []):
 
     public_scenario_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-scenario.json"
     frame_path = pathlib.Path("web/public/scenarios") / f"{scenario_id}-frame.json"
-    shutil.copyfile(scenario_path, public_scenario_path)
+    scenario_document = json.loads(scenario_path.read_text())
+    public_scenario_path.write_text(json.dumps(scenario_document, separators=(",", ":")) + "\n")
     subprocess.run(
         ["cargo", "run", "--locked", "-p", "city-game-cli", "--", "frame", str(scenario_path), str(frame_path)],
         check=True,
     )
+    frame_document = json.loads(frame_path.read_text())
+    frame_path.write_text(json.dumps(frame_document, separators=(",", ":")) + "\n")
 
     public = {key: value for key, value in scenario.items() if key != "scenarioPath"}
     public["scenario"] = f"./scenarios/{scenario_id}-scenario.json"
