@@ -46,6 +46,7 @@ jobs:
         run: cargo check --locked -p city-game-core --target wasm32-unknown-unknown
 
   build-pages:
+    if: ${{ github.event_name != 'pull_request' }}
     name: Build or reuse deployable browser proof
     needs: validate
     permissions:
