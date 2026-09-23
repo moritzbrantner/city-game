@@ -252,7 +252,11 @@ mod tests {
 
         assert_eq!(position.tick, 1_000_000);
         assert_eq!(save.time_position().unwrap(), position);
-        assert_eq!(\n            tick_writes(),\n            1,\n            "a fixed-step batch must commit the clock once"\n        );
+        assert_eq!(
+            tick_writes(),
+            1,
+            "a fixed-step batch must commit the clock once"
+        );
         assert_eq!(
             capacity_building_visits(),
             0,
@@ -262,7 +266,11 @@ mod tests {
         reset_tick_writes();
         let unchanged = save.advance_fixed_steps(0).unwrap();
         assert_eq!(unchanged, position);
-        assert_eq!(\n            tick_writes(),\n            0,\n            "zero-step advancement must not write the clock"\n        );
+        assert_eq!(
+            tick_writes(),
+            0,
+            "zero-step advancement must not write the clock"
+        );
     }
 
     #[test]
