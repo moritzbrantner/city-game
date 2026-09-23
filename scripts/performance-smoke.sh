@@ -44,3 +44,7 @@ printf '{"scenario":"fixed-step-10000","firstElapsedNs":%s,"secondElapsedNs":%s,
   "$first_elapsed" "$second_elapsed" "$save_bytes"
 printf '{"scenario":"render-frame-demo","elapsedNs":%s,"frameBytes":%s,"deterministic":true,"timing":"advisory-hosted-linux"}\n' \
   "$((frame_end - frame_start))" "$frame_bytes"
+
+# Timings remain advisory. Deterministic unit tests enforce the blocking work-count ratchets:
+# one clock write per non-zero batch and zero immutable-building visits during advancement.
+cargo bench --locked --quiet -p city-game-core --bench fixed_step -- --smoke
