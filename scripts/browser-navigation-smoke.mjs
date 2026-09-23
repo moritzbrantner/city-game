@@ -86,6 +86,16 @@ try {
     assert.equal(result.exceptionDetails, undefined, JSON.stringify(result.exceptionDetails));
     return result.result.value;
   };
+  const checkMenuLayout = async () => {
+    const layout = await evaluate(`(() => {
+      const menu = document.querySelector('.menu-shell');
+      const button = document.querySelector('#choose-scenario').getBoundingClientRect();
+      const panel = menu.getBoundingClientRect();
+      return { overflow: menu.scrollWidth - menu.clientWidth,
+        buttonFits: button.left >= panel.left && button.right <= panel.right };
+    })()`);
+    assert.ok(layout.overflow <= 1 && layout.buttonFits, `city menu overflow: ${JSON.stringify(layout)}`);
+  };
   const settle = () => evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
   const waitFor = async (expression) => {
     for (let attempt = 0; attempt < 150; attempt++) {
@@ -107,6 +117,7 @@ try {
   await send("Page.navigate", { url: `${base}?scenario=one&mode=city` });
   await waitFor("document.body?.dataset.mode === 'city' && document.querySelector('#open-scenario')?.disabled === false && globalThis.__cityEvidence?.camera != null");
   await settle();
+  await checkMenuLayout();
   const stats = () => evaluate("({...__cityEvidence.calls, uploads: __cityEvidence.uploads})");
   const initial = await stats();
   const originalCamera = await evaluate("__cityEvidence.camera");
@@ -196,6 +207,7 @@ try {
   await send("Emulation.setDeviceMetricsOverride", { width: 920, height: 720, deviceScaleFactor: 1, mobile: false });
   await settle();
   assert.equal((await stats()).city_game_prepare_render, before.city_game_prepare_render, "CSS resize rebuilt unchanged scene");
+  await checkMenuLayout();
   await click("#choose-scenario");
   await click("#scenario-list button:nth-child(2)");
   await waitFor("document.querySelector('#scenario').textContent === 'Navigation fixture two' && !document.querySelector('#open-scenario').disabled");
@@ -203,7 +215,8 @@ try {
   assert.equal(await evaluate("document.querySelector('#selection-name').textContent"), "Nothing");
   assert.equal(await evaluate("document.querySelector('#view-zoom').value"), "1.00×");
   assert.equal((await stats()).city_game_prepare_render, 2, "scenario switch did not prepare exactly one fresh scene");
-  checks.push("resize/no-preparation", "scenario-switch/resets-selection-and-camera");
+  await checkMenuLayout();
+  checks.push("resize/no-preparation", "scenario-switch/resets-selection-and-camera", "long-city-name/no-horizontal-menu-overflow");
   assert.deepEqual(exceptions, [], "uncaught browser exceptions");
   const evidence = { schemaVersion: 1, browser: await send("Browser.getVersion"), checks,
     stats: await stats(), fixture: "fixtures/demo-scenario.json", offlineOptionalFoundations: true,
