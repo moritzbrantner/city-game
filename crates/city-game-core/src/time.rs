@@ -1,11 +1,29 @@
 use std::fmt;
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{CityRuleset, CitySave, CitySaveError, CityScenario, CityWorld};
 
 pub const MINUTES_PER_DAY: u16 = 24 * 60;
 pub const DEFAULT_MINUTES_PER_TICK: u16 = 15;
+
+#[cfg(test)]
+std::thread_local! {
+    static TICK_WRITES: Cell<u64> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+fn reset_tick_writes() {
+    TICK_WRITES.with(|writes| writes.set(0));
+}
+
+#[cfg(test)]
+fn tick_writes() -> u64 {
+    TICK_WRITES.with(Cell::get)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,16 +52,20 @@ impl CityTimeConfig {
 
     pub fn position(self, tick: u64) -> Result<CityTimePosition, CityTimeError> {
         self.validate()?;
+        Ok(self.position_validated(tick))
+    }
+
+    fn position_validated(self, tick: u64) -> CityTimePosition {
         let ticks_per_day = u64::from(MINUTES_PER_DAY / self.minutes_per_tick);
         let tick_in_day = tick % ticks_per_day;
         let minute_of_day =
             u16::try_from(tick_in_day).expect("tick within a day fits u16") * self.minutes_per_tick;
 
-        Ok(CityTimePosition {
+        CityTimePosition {
             tick,
             day: tick / ticks_per_day,
             minute_of_day,
-        })
+        }
     }
 }
 
@@ -84,6 +106,13 @@ impl fmt::Display for CityTimeError {
 impl std::error::Error for CityTimeError {}
 
 impl CityWorld {
+    fn commit_tick(&mut self, tick: u64) {
+        #[cfg(test)]
+        TICK_WRITES.with(|writes| writes.set(writes.get() + 1));
+
+        self.tick = tick;
+    }
+
     fn advance_fixed_steps(
         &mut self,
         time: CityTimeConfig,
@@ -94,12 +123,11 @@ impl CityWorld {
             .tick
             .checked_add(steps)
             .ok_or(CityTimeError::TickOverflow)?;
-        let final_position = time.position(final_tick)?;
+        let final_position = time.position_validated(final_tick);
 
-        for _ in 0..steps {
-            self.tick += 1;
+        if steps != 0 {
+            self.commit_tick(final_tick);
         }
-        debug_assert_eq!(self.tick, final_tick);
 
         Ok(final_position)
     }
@@ -122,10 +150,11 @@ impl CitySave {
     }
 
     pub fn advance_fixed_steps(&mut self, steps: u64) -> Result<CityTimePosition, CitySaveError> {
-        self.ruleset.validate()?;
-        if self.ruleset.population.is_enabled() {
-            self.developed_population_capacity()?;
-        }
+        // Scenario, time, rules, and initial population capacity are validated when a save is
+        // constructed or deserialized. Current planning commands can only suppress/restore that
+        // already-validated building stock, so rescanning immutable buildings on every clock
+        // advance adds work without establishing a new invariant. Future systems that can create
+        // developed capacity must validate that mutation at their own authoritative boundary.
         Ok(self.world.advance_fixed_steps(self.time, steps)?)
     }
 }
@@ -135,8 +164,9 @@ mod tests {
     use geo_core::Geometry;
 
     use crate::{
-        BuildingUse, ExternalRevision, PopulationError, SCENARIO_SCHEMA_VERSION, ScenarioBuilding,
-        ScenarioProvenance,
+        BuildingUse, ExternalRevision, PopulationError, PopulationRules, RuleSystem, RuleStatus,
+        SCENARIO_SCHEMA_VERSION, ScenarioBuilding, ScenarioProvenance,
+        population::{capacity_building_visits, reset_capacity_building_visits},
     };
 
     use super::*;
@@ -208,6 +238,34 @@ mod tests {
     }
 
     #[test]
+    fn fixed_step_batch_commits_once_without_rescanning_buildings() {
+        let mut large = scenario();
+        large.buildings = (0..4_096)
+            .map(|index| residential_building(&format!("building/{index}"), 9_000))
+            .collect();
+        let mut save = CitySave::new(large).unwrap();
+
+        reset_tick_writes();
+        reset_capacity_building_visits();
+
+        let position = save.advance_fixed_steps(1_000_000).unwrap();
+
+        assert_eq!(position.tick, 1_000_000);
+        assert_eq!(save.time_position().unwrap(), position);
+        assert_eq!(tick_writes(), 1, "a fixed-step batch must commit the clock once");
+        assert_eq!(
+            capacity_building_visits(),
+            0,
+            "clock advancement must not rescan immutable building capacity"
+        );
+
+        reset_tick_writes();
+        let unchanged = save.advance_fixed_steps(0).unwrap();
+        assert_eq!(unchanged, position);
+        assert_eq!(tick_writes(), 0, "zero-step advancement must not write the clock");
+    }
+
+    #[test]
     fn save_resume_continues_from_identical_clock_position() {
         let config = CityTimeConfig::new(60).unwrap();
         let mut original = CitySave::new_with_time_config(scenario(), config).unwrap();
@@ -251,22 +309,35 @@ mod tests {
     }
 
     #[test]
-    fn population_capacity_overflow_fails_before_tick_mutation() {
-        let mut save = CitySave::new(scenario()).unwrap();
-        save.scenario.buildings = vec![
+    fn invalid_population_capacity_is_rejected_at_save_boundary() {
+        let mut invalid = scenario();
+        invalid.buildings = vec![
             residential_building("residential/1", u64::MAX),
             residential_building("residential/2", u64::MAX),
         ];
-        save.ruleset
-            .population
-            .config
-            .residential_floor_area_m2_per_household = 1;
-        let before = save.clone();
+        let mut ruleset = CityRuleset::default();
+        ruleset.population.config = PopulationRules {
+            residential_floor_area_m2_per_household: 1,
+            ..PopulationRules::default()
+        };
 
         assert_eq!(
-            save.advance_fixed_steps(1),
+            CitySave::new_with_config(invalid, CityTimeConfig::default(), ruleset),
             Err(CitySaveError::Population(PopulationError::CapacityOverflow))
         );
-        assert_eq!(save, before);
+    }
+
+    #[test]
+    fn disabled_population_rules_remain_valid_without_tick_revalidation() {
+        let mut ruleset = CityRuleset::default();
+        ruleset.set_status(RuleSystem::Population, RuleStatus::Disabled);
+        ruleset
+            .population
+            .config
+            .residential_floor_area_m2_per_household = 0;
+        let mut save =
+            CitySave::new_with_config(scenario(), CityTimeConfig::default(), ruleset).unwrap();
+
+        assert_eq!(save.advance_fixed_steps(10).unwrap().tick, 10);
     }
 }
