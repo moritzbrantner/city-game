@@ -23,3 +23,7 @@ geo-io-osm.workspace = true
 [dev-dependencies]
 osmpbfreader.workspace = true
 protobuf.workspace = true
+
+[[bench]]
+name = "fixed_step"
+harness = false
