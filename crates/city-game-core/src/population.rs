@@ -1,11 +1,29 @@
 use std::fmt;
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{BuildingUse, CitySave, CityScenario, ScenarioBuilding};
 
 const BASIS_POINTS: u64 = 10_000;
 const MAX_DEMAND_PRESSURE: i32 = 10_000;
+
+#[cfg(test)]
+std::thread_local! {
+    static CAPACITY_BUILDING_VISITS: Cell<u64> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_capacity_building_visits() {
+    CAPACITY_BUILDING_VISITS.with(|visits| visits.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn capacity_building_visits() -> u64 {
+    CAPACITY_BUILDING_VISITS.with(Cell::get)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -191,6 +209,9 @@ fn capacity_from_buildings<'a>(
     let mut capacity = PopulationCapacity::default();
 
     for building in buildings {
+        #[cfg(test)]
+        CAPACITY_BUILDING_VISITS.with(|visits| visits.set(visits.get() + 1));
+
         let (target, divisor) = match building.use_kind {
             BuildingUse::Residential => (
                 &mut capacity.households,
