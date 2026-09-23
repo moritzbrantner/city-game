@@ -38,6 +38,12 @@ function synthetic(roadCount) {
 }
 
 function reference(save, view = overview, ratio = aspect) {
+  // An overview returns the fitted camera directly. Re-applying an identity view
+  // subtracts/re-adds large f32 frustum bounds and can introduce rounding drift.
+  // Compare to the matching uncached operation, never mask discrepancies with epsilon.
+  if (view.panX === 0 && view.panY === 0 && view.zoom === 1) {
+    return call(wasm, "city_game_render_frame", [save], [ratio]).frame;
+  }
   return call(wasm, "city_game_render_frame_view", [save, view], [ratio]).frame;
 }
 

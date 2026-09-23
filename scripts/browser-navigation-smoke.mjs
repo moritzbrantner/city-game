@@ -93,57 +93,30 @@ try {
       assert.deepEqual(exceptions, [], "uncaught browser exception");
       await sleep(100);
     }
-    throw new Error(`browser state timed out: ${expression}`);
+    throw new Error(`browser state timed out: ${expression}; ${JSON.stringify(await evaluate("({url:location.href,ready:document.readyState,body:document.body?.innerText?.slice(0,6000),calls:globalThis.__cityEvidence?.calls})"))}`);
   };
   await send("Runtime.enable"); await send("Page.enable"); await send("Network.enable");
   // Optional external settings/input distributions are explicitly unavailable in this offline
   // fixture lane. Core WASM, renderer, DOM controls and pointer handlers are real built code.
   await send("Network.setBlockedURLs", { urls: ["https://*", "http://*.github.io/*"] });
   await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 960, deviceScaleFactor: 1, mobile: false });
-  await send("Page.addScriptToEvaluateOnNewDocument", { source: `
-    window.__cityEvidence = { calls: {}, uploads: 0, pointerId: null, camera: null, nodes: null };
-    const evidence = window.__cityEvidence;
-    addEventListener('pointerdown', event => { evidence.pointerId = event.pointerId; }, true);
-    const original = WebAssembly.instantiate;
-    WebAssembly.instantiate = async function(...args) {
-      const result = await original.apply(this, args);
-      const instance = result.instance ?? result;
-      const exports = { ...instance.exports };
-      for (const [name, value] of Object.entries(exports)) {
-        if (typeof value !== 'function' || !name.startsWith('city_game_') || /_(alloc|free)$/.test(name)) continue;
-        exports[name] = (...args) => {
-          evidence.calls[name] = (evidence.calls[name] ?? 0) + 1;
-          const packed = value(...args);
-          const unsigned = BigInt.asUintN(64, packed);
-          const response = JSON.parse(new TextDecoder().decode(new Uint8Array(exports.memory.buffer,
-            Number(unsigned & 0xffffffffn), Number(unsigned >> 32n))));
-          if (response.frame) { evidence.nodes = response.frame.nodes; evidence.camera = response.frame.camera; }
-          if (response.camera) evidence.camera = response.camera;
-          return packed;
-        };
-      }
-      return result.instance ? { ...result, instance: { exports } } : { exports };
-    };
-    for (const type of [globalThis.WebGLRenderingContext, globalThis.WebGL2RenderingContext]) {
-      if (!type) continue;
-      for (const name of ['bufferData', 'bufferSubData']) {
-        const original = type.prototype[name];
-        type.prototype[name] = function(...args) { evidence.uploads++; return original.apply(this, args); };
-      }
-    }
-  ` });
+  await send("Page.addScriptToEvaluateOnNewDocument", {
+    source: await readFile(new URL("./browser-evidence-preload.js", import.meta.url), "utf8"),
+  });
   const base = `http://127.0.0.1:${server.address().port}/city-game/`;
   await send("Page.navigate", { url: `${base}?scenario=one&mode=city` });
-  await waitFor("document.body.dataset.mode === 'city' && document.querySelector('#open-scenario')?.disabled === false && __cityEvidence.camera !== null");
+  await waitFor("document.body?.dataset.mode === 'city' && document.querySelector('#open-scenario')?.disabled === false && globalThis.__cityEvidence?.camera != null");
   await settle();
   const stats = () => evaluate("({...__cityEvidence.calls, uploads: __cityEvidence.uploads})");
   const initial = await stats();
   const originalCamera = await evaluate("__cityEvidence.camera");
+  const originalProjection = await evaluate("__cityEvidence.projection");
+  assert.ok(Array.isArray(originalProjection) && originalProjection.length === 16, "GPU projection was not observed");
   assert.equal(initial.city_game_prepare_render, 1);
   assert.ok(initial.uploads > 0, "the real WebGL renderer did not upload geometry");
   const click = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); await settle(); };
   for (let index = 0; index < 8; index++) { await click("#view-zoom-in"); await click("#view-overview"); }
-  assert.deepEqual(await evaluate("__cityEvidence.camera"), originalCamera, "overview camera drifted");
+  assert.deepEqual(await evaluate("__cityEvidence.projection"), originalProjection, "displayed overview camera drifted");
   const beforeDuplicate = await stats();
   await click("#view-overview");
   assert.deepEqual(await stats(), beforeDuplicate, "duplicate overview did extra work");
@@ -157,10 +130,11 @@ try {
 
   // Project the known building centre only to drive input. Simulation/render authority is untouched.
   const buildingPoint = await evaluate(`(() => {
+    const camera = ${JSON.stringify(originalCamera)};
     const node = __cityEvidence.nodes.find(node => node.id === 'imported/way/20');
     const multiply = (m, p) => [0,1,2,3].map(row => p.reduce((sum,v,col) => sum + m[col*4+row]*v, 0));
-    const view = multiply(__cityEvidence.camera.viewMatrix, [...node.transform.translation, 1]);
-    const p = multiply(__cityEvidence.camera.projectionMatrix, view);
+    const view = multiply(camera.viewMatrix, [...node.transform.translation, 1]);
+    const p = multiply(camera.projectionMatrix, view);
     const r = document.querySelector('#scene').getBoundingClientRect();
     return { x: r.left + (p[0]/p[3]+1)*r.width/2, y: r.top + (1-p[1]/p[3])*r.height/2 };
   })()`);
