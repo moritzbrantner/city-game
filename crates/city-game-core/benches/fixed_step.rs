@@ -1,7 +1,4 @@
-use std::{
-    hint::black_box,
-    time::Instant,
-};
+use std::{hint::black_box, time::Instant};
 
 use city_game_core::{
     BuildingUse, CityRuleset, CitySave, CityScenario, CityTimeConfig, ExternalRevision,
