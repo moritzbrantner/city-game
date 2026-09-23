@@ -237,8 +237,8 @@ mod tests {
         let view = r#"{"panX":0.25,"panY":-0.125,"zoom":2.0}"#;
         let overview = serde_json::to_string(&prepared["overview"]).unwrap();
         let camera: Value = serde_json::from_str(&render_camera_json(&overview, view)).unwrap();
-        let full: Value = serde_json::from_str(&render_frame_with_view_json(&save_json, view, 1.0))
-            .unwrap();
+        let full: Value =
+            serde_json::from_str(&render_frame_with_view_json(&save_json, view, 1.0)).unwrap();
         assert_eq!(camera["ok"], true);
         assert_eq!(camera["camera"], full["frame"]["camera"]);
         assert_eq!(camera.as_object().unwrap().len(), 2);

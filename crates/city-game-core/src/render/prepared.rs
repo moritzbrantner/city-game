@@ -98,8 +98,7 @@ mod tests {
             let prepared = prepare_save_frame(save, aspect).unwrap();
             // Exercise the actual browser JSON round trip, not just Rust values.
             let overview: PreparedCamera =
-                serde_json::from_str(&serde_json::to_string(&prepared.overview).unwrap())
-                    .unwrap();
+                serde_json::from_str(&serde_json::to_string(&prepared.overview).unwrap()).unwrap();
             for view in [
                 RenderView::overview(),
                 RenderView {
@@ -119,8 +118,8 @@ mod tests {
                 },
                 RenderView::overview(),
             ] {
-                let full = super::super::build_save_render_frame_with_view(save, aspect, view)
-                    .unwrap();
+                let full =
+                    super::super::build_save_render_frame_with_view(save, aspect, view).unwrap();
                 assert_eq!(prepared.frame.nodes, full.nodes);
                 assert_eq!(prepared_camera_view(&overview, view).unwrap(), full.camera);
             }
@@ -165,7 +164,10 @@ mod tests {
         assert_ne!(original.frame, changed.frame);
         assert_equivalent(&save);
         save.execute(CityCommand::Restart).unwrap();
-        assert_eq!(prepare_save_frame(&save, 1.0).unwrap().frame, original.frame);
+        assert_eq!(
+            prepare_save_frame(&save, 1.0).unwrap().frame,
+            original.frame
+        );
     }
 
     #[test]

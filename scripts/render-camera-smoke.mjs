@@ -61,9 +61,13 @@ for (const roadCount of [1, 64, 256]) {
     },
     city_game_render_camera(...args) {
       stats.camera++;
-      stats.cameraInputBytes += args[1] + args[3];
+      const inputBytes = args[1] + args[3];
+      assert.ok(inputBytes <= 2_048, "camera request exceeds the per-view byte budget");
+      stats.cameraInputBytes += inputBytes;
       const result = wasm.city_game_render_camera(...args);
-      stats.cameraOutputBytes += Number(BigInt.asUintN(64, result) >> 32n);
+      const outputBytes = Number(BigInt.asUintN(64, result) >> 32n);
+      assert.ok(outputBytes <= 2_048, "camera response exceeds the per-view byte budget");
+      stats.cameraOutputBytes += outputBytes;
       return result;
     },
     city_game_render_frame(...args) {
