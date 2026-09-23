@@ -6,7 +6,7 @@
     {
       "id": "fixed-step-10000",
       "kind": "scaling",
-      "description": "Advance the canonical demo save through 10,000 fixed simulation steps from an identical initial save.",
+      "description": "Advance the canonical demo save through 10,000 fixed simulation steps from an identical initial save. The clock batch itself is constant-work and must not rescan immutable building capacity.",
       "dimensions": {
         "fixture": "fixtures/demo-scenario.json",
         "fixed_steps": 10000,
@@ -15,7 +15,9 @@
       "correctnessEvidence": [
         "byte-identical final save across repeated runs",
         "scenario schema validation",
-        "fixed-step advancement completes without error"
+        "fixed-step advancement completes without error",
+        "one clock write for a non-zero batch regardless of step count",
+        "zero immutable-building capacity visits during fixed-step advancement"
       ],
       "metrics": [
         {
@@ -33,20 +35,30 @@
           "blocking": false
         },
         {
-          "name": "system_visits",
+          "name": "tick_writes_per_batch",
+          "unit": "writes",
+          "direction": "lower",
+          "signal": "operation-count",
+          "blocking": true,
+          "budget": 1,
+          "notes": "Thread-local test instrumentation requires exactly one authoritative clock commit for any non-zero batch and zero for a zero-step batch."
+        },
+        {
+          "name": "population_building_visits_per_advance",
           "unit": "visits",
           "direction": "lower",
           "signal": "operation-count",
-          "blocking": false,
-          "notes": "Instrumentation prerequisite: expose deterministic per-system fixed-step work before enabling a blocking budget."
+          "blocking": true,
+          "budget": 0,
+          "notes": "Validated immutable scenario building capacity may not be recomputed merely to advance time. Future capacity-changing systems must validate at their mutation boundary."
         },
         {
-          "name": "materializations",
-          "unit": "materializations",
-          "direction": "lower",
-          "signal": "operation-count",
+          "name": "legacy_to_candidate_speedup",
+          "unit": "ratio",
+          "direction": "higher",
+          "signal": "wall-clock",
           "blocking": false,
-          "notes": "Track save/scenario-derived recomputation so fixed-step code cannot silently rebuild unchanged indexes or views every tick."
+          "notes": "Cargo-native advisory benchmark compares the candidate against the previous work pattern: per-call rules validation, population-capacity scan, and iterative clock advancement."
         }
       ]
     },
