@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { checkDisplayedCamera } from "./navigation-contract.mjs";
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir, mkdtemp, rm, access } from "node:fs/promises";
@@ -126,7 +127,14 @@ try {
   assert.equal(initial.city_game_prepare_render, 1);
   assert.ok(initial.uploads > 0, "the real WebGL renderer did not upload geometry");
   const click = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); await settle(); };
-  for (let index = 0; index < 8; index++) { await click("#view-zoom-in"); await click("#view-overview"); }
+  for (let index = 0; index < 8; index++) {
+    await click("#view-zoom-in");
+    const zoomed = await evaluate("__cityEvidence.projection");
+    assert.notDeepEqual(zoomed, originalProjection, "zoom never reached the GPU");
+    checkDisplayedCamera(zoomed, await evaluate("__cityEvidence.camera.projectionMatrix"));
+    await click("#view-overview");
+  }
+  checks.push("zoom/displayed-camera-matches-Rust");
   assert.deepEqual(await evaluate("__cityEvidence.projection"), originalProjection, "displayed overview camera drifted");
   const beforeDuplicate = await stats();
   await click("#view-overview");
@@ -185,6 +193,7 @@ try {
   assert.deepEqual(await stats(), before, "cancelled pointer applied queued movement");
   checks.push("pointercancel/discards-pending-pan");
 
+  const projectionBeforePan = await evaluate("__cityEvidence.projection");
   await mouse("mousePressed", rect, { button: "left", buttons: 1, clickCount: 1 });
   before = await stats();
   await evaluate(`(() => {
@@ -198,6 +207,10 @@ try {
   await mouse("mouseReleased", { x: rect.x + 40, y: rect.y }, { button: "left", buttons: 0, clickCount: 1 });
   await settle();
   const afterDrag = await stats();
+  const pannedProjection = await evaluate("__cityEvidence.projection");
+  assert.notDeepEqual(pannedProjection, projectionBeforePan, "pan never reached the GPU");
+  checkDisplayedCamera(pannedProjection, await evaluate("__cityEvidence.camera.projectionMatrix"));
+  checks.push("pan/displayed-camera-matches-Rust");
   assert.equal(afterDrag.city_game_render_camera - before.city_game_render_camera, 1, "pan burst was not coalesced");
   assert.equal(afterDrag.city_game_prepare_render, before.city_game_prepare_render);
   assert.equal(afterDrag.uploads, before.uploads);

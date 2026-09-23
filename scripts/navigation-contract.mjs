@@ -31,3 +31,17 @@ export function summarize(samples) {
     maxMs: sorted.at(-1),
   };
 }
+
+// The shared adapter changes only the depth row for WebGPU-to-WebGL conversion.
+// Compare all other GPU-uniform components exactly at their uploaded f32 precision.
+export function checkDisplayedCamera(displayed, expected) {
+  for (const matrix of [displayed, expected]) {
+    assert.ok(Array.isArray(matrix) && matrix.length === 16 && matrix.every(Number.isFinite),
+      "displayed and expected cameras must be finite matrices");
+  }
+  for (let index = 0; index < 16; index++) {
+    if (index % 4 === 2) continue;
+    assert.equal(displayed[index] || 0, Math.fround(expected[index]) || 0,
+      `displayed camera component ${index} did not receive the requested view`);
+  }
+}

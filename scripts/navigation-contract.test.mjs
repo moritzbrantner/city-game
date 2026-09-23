@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";
 import { CityRenderCache } from "../web/src/render-cache.js";
-import { checkCoverage, checkNavigation, summarize } from "./navigation-contract.mjs";
+import { checkCoverage, checkNavigation, checkDisplayedCamera, summarize } from "./navigation-contract.mjs";
 
 const contract = JSON.parse(readFileSync(new URL("../.performance/navigation-budget.json", import.meta.url)));
 const budget = { ...contract, ...contract.fixtures["roads-256"] };
@@ -55,4 +55,21 @@ test("timing summaries retain distributions without mutating samples", () => {
   assert.deepEqual(samples, [7, 1, 5, 3, 4, 2, 6]);
   assert.throws(() => summarize([]));
   assert.throws(() => summarize([NaN]));
+});
+
+const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+test("displayed-camera guard accepts shared-adapter depth conversion", () => {
+  const gpu = [...identity];
+  gpu[10] = 2; gpu[14] = -1;
+  checkDisplayedCamera(gpu, identity);
+});
+test("displayed-camera guard rejects a renderer that ignores zoom", () => {
+  const zoomed = [...identity];
+  zoomed[0] = 2; zoomed[5] = 2;
+  assert.throws(() => checkDisplayedCamera(identity, zoomed), assert.AssertionError);
+});
+test("displayed-camera guard rejects a renderer that ignores pan", () => {
+  const panned = [...identity];
+  panned[12] = 0.25; panned[13] = -0.125;
+  assert.throws(() => checkDisplayedCamera(identity, panned), assert.AssertionError);
 });
