@@ -4,7 +4,9 @@
   "type": "module",
   "packageManager": "bun@1.3.14",
   "scripts": {
-    "build": "rm -rf dist && bun build src/main.js src/surface.js src/route.js --outdir dist --target browser --external=@moritzbrantner/settings-browser --external=@moritzbrantner/input-bindings-browser && mkdir -p dist/scenarios && cp index.html src/style.css src/enhancements.css public/scenarios.json public/city-game-core.wasm dist/ && cp public/scenarios/*.json dist/scenarios/"
+    "test:render-cache": "node --test ../scripts/render-cache.test.mjs",
+    "test:render-wasm": "node ../scripts/render-camera-smoke.mjs public/city-game-core.wasm",
+    "build": "bun run test:render-cache && bun run test:render-wasm && rm -rf dist && bun build src/main.js src/surface.js src/route.js --outdir dist --target browser --external=@moritzbrantner/settings-browser --external=@moritzbrantner/input-bindings-browser && mkdir -p dist/scenarios && cp index.html src/style.css src/enhancements.css public/scenarios.json public/city-game-core.wasm dist/ && cp public/scenarios/*.json dist/scenarios/"
   },
   "dependencies": {
     "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#ca276df4c98d667d8fb13187bf5c61cdb26ba4bc"

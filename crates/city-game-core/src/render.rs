@@ -1,3 +1,9 @@
+#[cfg(any(test, target_arch = "wasm32"))]
+mod prepared;
+
+#[cfg(any(test, target_arch = "wasm32"))]
+pub(crate) use prepared::{PreparedCamera, prepare_save_frame, prepared_camera_view};
+
 use core::fmt;
 
 use geo_core::Geometry;
