@@ -61,7 +61,7 @@ test("camera-only presentation stays O(1) after a 21k-node scene submission", ()
   for (let index = 1; index <= budget.cameraFrames; index++) {
     const result = presenter.render({ camera: camera(index + 1), nodes });
     assert.equal(result.path, "camera");
-    assert.equal(result.observations.nodeVisitCount, 0);
+    assert.equal(result.observations.nodeVisitCount, budget.maxCameraOnlyRendererNodeVisits);
     assert.strictEqual(result.frame.nodes, nodes);
   }
 
