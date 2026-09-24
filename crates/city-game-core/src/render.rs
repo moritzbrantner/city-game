@@ -1107,8 +1107,7 @@ mod tests {
         GameWorldProjection {
             origin_lon,
             origin_lat,
-            longitude_meters_per_degree: latitude_meters_per_degree
-                * origin_lat.to_radians().cos(),
+            longitude_meters_per_degree: latitude_meters_per_degree * origin_lat.to_radians().cos(),
             latitude_meters_per_degree,
         }
     }
