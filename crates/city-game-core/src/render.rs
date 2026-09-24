@@ -306,31 +306,18 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let mut fit_points = Vec::new();
     let planning = &save.world.planning;
 
-    // Rendering needs borrowed road semantics, not the cloned/sorted EffectiveRoad query
-    // projection. Nodes are sorted once at the frame boundary below.
-    for road in &save.scenario.roads {
-        if planning.is_suppressed(&road.id) {
-            continue;
-        }
+    // Rendering borrows planning semantics directly instead of materializing/cloning
+    // the public EffectiveRoad query shape. Nodes are sorted once at the frame boundary.
+    planning.visit_effective_roads(&save.scenario, &mut |id, geometry, class| {
         append_road_nodes(
-            &road.id,
-            &road.geometry,
-            road.class,
+            id,
+            geometry,
+            class,
             projection,
             &mut nodes,
             &mut fit_points,
         );
-    }
-    for road in planning.player_roads.values() {
-        append_road_nodes(
-            &road.id,
-            &road.geometry,
-            road.class,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-        );
-    }
+    });
     for building in &save.scenario.buildings {
         if planning.is_suppressed(&building.id) {
             continue;
