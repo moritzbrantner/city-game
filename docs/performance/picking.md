@@ -12,13 +12,17 @@ The optimized path separates one-time scene preparation from repeated picks:
 
 - when render-node identity changes, build one disposable spatial index;
 - project each pickable box once into normalized fitted-overview space using the authoritative
-  3d-lab `projectWorldPoint` helper;
+  3d-lab `createWorldProjector` helper, which validates the retained camera/viewport once
+  for the complete projection batch;
 - bucket those immutable overview bounds in a bounded static grid;
 - map a pointer plus click slop into the same overview coordinate system using city-game's
   explicit `RenderView` pan/zoom contract;
 - query only overlapping buckets;
-- run the exact previous screen-bounds projection and ranking algorithm on that bounded
-  candidate set.
+- transform cached overview bounds into current screen bounds algebraically, so supported
+  repeated picks perform zero 3D point projections;
+- when the pointer is already inside one or more boxes, traverse the area-sorted cell only
+  until the exact smallest-area containing candidate (plus equal-area ties) is resolved;
+- preserve the exact previous ranking order on the resulting candidates.
 
 The grid is only a coarse candidate accelerator. It does not decide the selected object.
 
@@ -30,9 +34,10 @@ ranking remains unchanged: hit distance, projected area, entity-kind priority, c
 distance, depth, then stable node id.
 
 The index intentionally does not invert or recreate camera matrices. Generic projection
-math remains owned by 3d-lab. Normalized index coordinates are derived through
-`projectWorldPoint`, while conversion between overview/current normalized screen positions
-uses the public city-game `RenderView` semantics.
+math remains owned by 3d-lab. Normalized index coordinates are derived through the prepared
+3d-lab projector, while conversion between overview/current normalized screen positions
+uses the public city-game `RenderView` semantics. The retained camera-family check proves
+that this affine conversion remains valid; otherwise the exact linear path is used.
 
 Focused-selection bounds reuse the same per-entity index. Focusing a road therefore projects
 only that road's segments instead of filtering and projecting the entire city.
@@ -59,13 +64,14 @@ stress case contains 21,451 nodes and 256 deterministic mouse/touch queries.
 After one index build, a supported pick must:
 
 - perform zero full-scene fallback visits;
-- evaluate at most 256 exact candidate bounds;
-- perform at most 2,048 point projections (eight corners per candidate);
+- perform zero point projections after the index is built;
+- keep cached-bound candidate evaluation below both 2,048 nodes and 10% of the scene;
 - preserve exact selected-node equality with the linear oracle in differential tests.
 
 The build may visit each scene node once and each indexed box may project its eight corners
-once. Very large boxes are retained in a small wide-item list instead of being copied into
-an unbounded number of grid cells.
+once. The prepared projector validates camera matrices and viewport once for that complete
+batch rather than 8 × node-count times. Very large boxes are retained in a small wide-item
+list instead of being copied into an unbounded number of grid cells.
 
 These are operation-count budgets, not wall-clock substitutes. Shared-runner timings remain
 advisory.
@@ -75,6 +81,8 @@ advisory.
 `scripts/picking-index.test.mjs` covers:
 
 - exact indexed/linear parity across pan, zoom, mouse/touch slop and empty space;
+- zero repeated point projections on the retained picking path;
+- area-ordered exact-hit short-circuiting without changing winner semantics;
 - the 21,451-node structural stress budget;
 - camera-family fallback;
 - per-entity focus bounds without a scene scan;
