@@ -260,7 +260,8 @@ export class CityPickingIndex {
     let cellOffset = 0;
     let wideOffset = 0;
     let best = null;
-    let bestArea = Infinity;
+    let bestRankArea = Infinity;
+    const screenAreaScale = pointer.width * pointer.height * view.zoom * view.zoom;
 
     while (cellOffset < cellItems.length || wideOffset < this.#wideItems.length) {
       const cellIndex = cellItems[cellOffset];
@@ -291,7 +292,8 @@ export class CityPickingIndex {
       }
 
       const item = this.#items[itemIndex];
-      if (item.area > bestArea) break;
+      const rankArea = Math.max(1, item.area * screenAreaScale);
+      if (rankArea > bestRankArea) break;
       work.candidateIndexVisits++;
       if (!pointInsideBounds(center, item)) continue;
 
@@ -306,7 +308,7 @@ export class CityPickingIndex {
       );
       if (!best || compareCandidates(candidate, best) < 0) {
         best = candidate;
-        bestArea = item.area;
+        bestRankArea = candidate.area;
       }
     }
     return best;
