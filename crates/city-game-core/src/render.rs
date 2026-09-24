@@ -309,14 +309,7 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     // Rendering borrows planning semantics directly instead of materializing/cloning
     // the public EffectiveRoad query shape. Nodes are sorted once at the frame boundary.
     planning.visit_effective_roads(&save.scenario, &mut |id, geometry, class| {
-        append_road_nodes(
-            id,
-            geometry,
-            class,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-        );
+        append_road_nodes(id, geometry, class, projection, &mut nodes, &mut fit_points);
     });
     for building in &save.scenario.buildings {
         if planning.is_suppressed(&building.id) {
@@ -1015,7 +1008,11 @@ mod tests {
         let actual = frame
             .nodes
             .iter()
-            .filter_map(|node| node.id.split_once("/road-segment-").map(|(id, _)| id.to_owned()))
+            .filter_map(|node| {
+                node.id
+                    .split_once("/road-segment-")
+                    .map(|(id, _)| id.to_owned())
+            })
             .collect::<std::collections::BTreeSet<_>>();
 
         assert_eq!(actual, expected);
