@@ -148,6 +148,16 @@ pub struct EffectiveRoad {
     pub source_id: Option<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct EffectiveRoadRef<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) geometry: &'a Geometry,
+    pub(crate) class: RoadClass,
+    pub(crate) name: Option<&'a str>,
+    pub(crate) origin: EffectiveRoadOrigin,
+    pub(crate) source_id: Option<&'a str>,
+}
+
 impl CityPlanningOverlay {
     pub fn apply(
         &mut self,
@@ -204,30 +214,50 @@ impl CityPlanningOverlay {
     }
 
     pub fn effective_roads(&self, scenario: &CityScenario) -> Vec<EffectiveRoad> {
-        let mut roads = scenario
-            .roads
-            .iter()
-            .filter(|road| !self.is_suppressed(&road.id))
-            .map(|road| EffectiveRoad {
-                id: road.id.clone(),
+        let mut roads = Vec::with_capacity(scenario.roads.len() + self.player_roads.len());
+        self.visit_effective_roads(scenario, |road| {
+            roads.push(EffectiveRoad {
+                id: road.id.to_owned(),
                 geometry: road.geometry.clone(),
                 class: road.class,
-                name: road.name.clone(),
-                origin: EffectiveRoadOrigin::Scenario,
-                source_id: Some(road.source_id.clone()),
-            })
-            .collect::<Vec<_>>();
-
-        roads.extend(self.player_roads.values().map(|road| EffectiveRoad {
-            id: road.id.clone(),
-            geometry: road.geometry.clone(),
-            class: road.class,
-            name: road.name.clone(),
-            origin: EffectiveRoadOrigin::Player,
-            source_id: None,
-        }));
+                name: road.name.map(str::to_owned),
+                origin: road.origin,
+                source_id: road.source_id.map(str::to_owned),
+            });
+        });
         roads.sort_by(|left, right| left.id.cmp(&right.id));
         roads
+    }
+
+    pub(crate) fn visit_effective_roads<'a>(
+        &'a self,
+        scenario: &'a CityScenario,
+        mut visitor: impl FnMut(EffectiveRoadRef<'a>),
+    ) {
+        for road in &scenario.roads {
+            if self.is_suppressed(&road.id) {
+                continue;
+            }
+            visitor(EffectiveRoadRef {
+                id: &road.id,
+                geometry: &road.geometry,
+                class: road.class,
+                name: road.name.as_deref(),
+                origin: EffectiveRoadOrigin::Scenario,
+                source_id: Some(&road.source_id),
+            });
+        }
+
+        for road in self.player_roads.values() {
+            visitor(EffectiveRoadRef {
+                id: &road.id,
+                geometry: &road.geometry,
+                class: road.class,
+                name: road.name.as_deref(),
+                origin: EffectiveRoadOrigin::Player,
+                source_id: None,
+            });
+        }
     }
 
     pub(crate) fn validate_against_scenario(
@@ -546,6 +576,61 @@ mod tests {
         let roads = save.effective_roads();
         assert_eq!(roads.len(), 1);
         assert_eq!(roads[0].id, "player/road/1");
+    }
+
+    #[test]
+    fn borrowed_effective_roads_match_owned_query_semantics() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.apply_planning(PlanningCommand::AddRoad {
+            road: PlannedRoad {
+                id: "player/road/1".to_owned(),
+                geometry: line(8.01),
+                class: RoadClass::Secondary,
+                name: Some("Player Street".to_owned()),
+            },
+        })
+        .unwrap();
+
+        let assert_equivalent = |save: &CitySave| {
+            let owned = save.effective_roads();
+            let mut borrowed = Vec::new();
+            save.world
+                .planning
+                .visit_effective_roads(&save.scenario, |road| {
+                    borrowed.push((
+                        road.id.to_owned(),
+                        road.geometry.clone(),
+                        road.class,
+                        road.name.map(str::to_owned),
+                        road.origin,
+                        road.source_id.map(str::to_owned),
+                    ));
+                });
+            borrowed.sort_by(|left, right| left.0.cmp(&right.0));
+
+            let owned = owned
+                .into_iter()
+                .map(|road| {
+                    (
+                        road.id,
+                        road.geometry,
+                        road.class,
+                        road.name,
+                        road.origin,
+                        road.source_id,
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(borrowed, owned);
+        };
+
+        assert_equivalent(&save);
+
+        save.apply_planning(PlanningCommand::SuppressScenarioEntity {
+            id: "imported/way/10".to_owned(),
+        })
+        .unwrap();
+        assert_equivalent(&save);
     }
 
     #[test]
