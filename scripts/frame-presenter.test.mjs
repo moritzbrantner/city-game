@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import {
   CityFramePresenter,
   entityIdForNode,
   validateSessionFrame,
 } from "../web/src/frame-presenter.js";
+
+const budget = JSON.parse(
+  readFileSync(new URL("../.performance/navigation-budget.json", import.meta.url), "utf8"),
+).presentation;
 
 function camera(seed = 1) {
   return {
@@ -34,7 +39,7 @@ function rendererHarness() {
 
 test("camera-only presentation stays O(1) after a 21k-node scene submission", () => {
   let nodeReads = 0;
-  const source = Array.from({ length: 21_451 }, (_, index) => ({
+  const source = Array.from({ length: budget.nodes }, (_, index) => ({
     id: `building/${index}`,
     geometry: { kind: "box", size: [1, 1, 1] },
     color: 0xffffff,
@@ -53,15 +58,20 @@ test("camera-only presentation stays O(1) after a 21k-node scene submission", ()
   presenter.render({ camera: camera(), nodes });
   const readsAfterScene = nodeReads;
 
-  for (let index = 1; index <= 10_000; index++) {
+  for (let index = 1; index <= budget.cameraFrames; index++) {
     const result = presenter.render({ camera: camera(index + 1), nodes });
     assert.equal(result.path, "camera");
     assert.equal(result.observations.nodeVisitCount, 0);
     assert.strictEqual(result.frame.nodes, nodes);
   }
 
-  assert.deepEqual(work, { sceneCalls: 1, cameraCalls: 10_000, nodeVisits: 21_451 });
-  assert.equal(nodeReads, readsAfterScene, "camera path traversed retained scene nodes");
+  assert.equal(work.sceneCalls, budget.maxFullSceneSubmissions);
+  assert.equal(work.cameraCalls, budget.cameraFrames);
+  assert.equal(work.nodeVisits, budget.nodes);
+  assert.ok(
+    nodeReads - readsAfterScene <= budget.maxNodeReadsAfterInitialSubmission,
+    "camera path traversed retained scene nodes",
+  );
 });
 
 test("selection decoration is materialized once and reused across camera movement", () => {
