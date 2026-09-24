@@ -3,7 +3,8 @@ use std::str;
 use serde_json::json;
 
 use crate::browser_transport::{
-    execute_json, new_save_json, query_json, render_frame_json, render_frame_with_view_json,
+    execute_json, new_save_json, prepare_render_json, query_json, render_camera_json,
+    render_frame_json, render_frame_with_view_json,
 };
 
 #[unsafe(no_mangle)]
@@ -62,6 +63,31 @@ pub extern "C" fn city_game_render_frame(save_ptr: u32, save_len: u32, aspect: f
         Err(error) => error_response(&error),
     };
     write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_prepare_render(save_ptr: u32, save_len: u32, aspect: f32) -> u64 {
+    let response = match read_input(save_ptr, save_len) {
+        Ok(save) => prepare_render_json(&save, aspect),
+        Err(error) => error_response(&error),
+    };
+    write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_render_camera(
+    overview_ptr: u32,
+    overview_len: u32,
+    view_ptr: u32,
+    view_len: u32,
+) -> u64 {
+    respond_with_two(
+        overview_ptr,
+        overview_len,
+        view_ptr,
+        view_len,
+        render_camera_json,
+    )
 }
 
 #[unsafe(no_mangle)]

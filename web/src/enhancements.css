@@ -69,3 +69,18 @@ body[data-selection="active"] .inspection-panel > summary::after {
     transition-duration: .001ms !important;
   }
 }
+
+/* Long scenario names must not displace the change-city action outside the panel. */
+.city-heading {
+  flex-wrap: wrap;
+}
+
+.city-heading > div {
+  min-width: 0;
+  flex: 1 1 14rem;
+}
+
+.city-heading h1,
+.city-region {
+  overflow-wrap: anywhere;
+}

@@ -1,3 +1,9 @@
+#[cfg(any(test, target_arch = "wasm32"))]
+mod prepared;
+
+#[cfg(any(test, target_arch = "wasm32"))]
+pub(crate) use prepared::{PreparedCamera, prepare_save_frame, prepared_camera_view};
+
 use core::fmt;
 
 use geo_core::Geometry;
@@ -288,16 +294,11 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let mut fit_points = Vec::new();
     let planning = &save.world.planning;
 
-    for road in save.effective_roads() {
-        append_road_nodes(
-            &road.id,
-            &road.geometry,
-            road.class,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-        );
-    }
+    // Rendering borrows planning semantics directly instead of materializing/cloning
+    // the public EffectiveRoad query shape. Nodes are sorted once at the frame boundary.
+    planning.visit_effective_roads(&save.scenario, &mut |id, geometry, class| {
+        append_road_nodes(id, geometry, class, projection, &mut nodes, &mut fit_points);
+    });
     for building in &save.scenario.buildings {
         if planning.is_suppressed(&building.id) {
             continue;
@@ -1023,6 +1024,40 @@ mod tests {
                 .any(|node| node.id == "player/road/1/road-segment-0")
         );
         assert!(frame.nodes.iter().any(|node| node.id == "player/zone/1"));
+    }
+
+    #[test]
+    fn save_frame_road_membership_matches_effective_road_query_without_query_materialization() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.apply_planning(PlanningCommand::AddRoad {
+            road: PlannedRoad {
+                id: "player/road/borrowed".to_owned(),
+                geometry: Geometry::LineString {
+                    coordinates: vec![[8.002, 48.0], [8.003, 48.001]],
+                },
+                class: RoadClass::Primary,
+                name: Some("Borrowed Road".to_owned()),
+            },
+        })
+        .unwrap();
+
+        let expected = save
+            .effective_roads()
+            .into_iter()
+            .map(|road| road.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        let frame = build_save_render_frame(&save, 1.0).unwrap();
+        let actual = frame
+            .nodes
+            .iter()
+            .filter_map(|node| {
+                node.id
+                    .split_once("/road-segment-")
+                    .map(|(id, _)| id.to_owned())
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(actual, expected);
     }
 
     #[test]

@@ -230,6 +230,21 @@ impl CityPlanningOverlay {
         roads
     }
 
+    pub(crate) fn visit_effective_roads(
+        &self,
+        scenario: &CityScenario,
+        visitor: &mut impl FnMut(&str, &Geometry, RoadClass),
+    ) {
+        for road in &scenario.roads {
+            if !self.is_suppressed(&road.id) {
+                visitor(&road.id, &road.geometry, road.class);
+            }
+        }
+        for road in self.player_roads.values() {
+            visitor(&road.id, &road.geometry, road.class);
+        }
+    }
+
     pub(crate) fn validate_against_scenario(
         &self,
         scenario: &CityScenario,

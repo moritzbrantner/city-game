@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "suite": "city-game/prepared-camera-v1",
+  "baselineSource": "cb4c1a73bd9a2aa2b101d8915513b6e2e45cbfd7",
+  "baselineRun": "35875844456",
+  "frames": 24,
+  "maxInputBytes": 352,
+  "maxOutputBytes": 512,
+  "fixtures": {
+    "roads-1": {
+      "roads": 1,
+      "nodes": 4,
+      "inputBytes": 6938,
+      "outputBytes": 10892
+    },
+    "roads-64": {
+      "roads": 64,
+      "nodes": 130,
+      "inputBytes": 6770,
+      "outputBytes": 10849
+    },
+    "roads-256": {
+      "roads": 256,
+      "nodes": 514,
+      "inputBytes": 6770,
+      "outputBytes": 10938
+    },
+    "roads-4096": {
+      "roads": 4096,
+      "nodes": 8194,
+      "inputBytes": 8448,
+      "outputBytes": 12288
+    }
+  },
+  "timing": {
+    "warmups": 2,
+    "samples": 7,
+    "blocking": false
+  },
+  "policy": "No automatic baseline updates. Existing JS/WASM fixture byte ceilings come from PR #41; the large fixture and retained-presentation budgets are structural ceilings. Changes require an explained, reviewed baseline change with correctness evidence. Timings are repeated, paired, advisory measurements, not shared-runner pass/fail thresholds.",
+  "presentation": {
+    "nodes": 21451,
+    "cameraFrames": 10000,
+    "maxNodeReadsAfterInitialSubmission": 0,
+    "maxFullSceneSubmissions": 1,
+    "maxCameraOnlyRendererNodeVisits": 0
+  }
+}

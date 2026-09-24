@@ -1,8 +1,10 @@
 import {
   createThreeSceneRenderer,
   projectWorldPoint,
+  validateRenderCamera,
   validateRenderFrame,
 } from "@moritzbrantner/three-d-renderer";
+import { CityFramePresenter, entityIdForNode, validateSessionFrame } from "./frame-presenter.js";
 import { createCityGameRuntime } from "./wasm.js";
 
 const DEFAULT_FRAME_ASPECT = 16 / 9;
@@ -139,6 +141,7 @@ for (const scenario of manifest.scenarios) {
 const scenarioOrder = [...scenarios.values()];
 
 let renderer = createRenderer();
+const framePresenter = new CityFramePresenter(renderer);
 let appMode = "picker";
 let currentFrame = null;
 let currentSession = null;
@@ -179,6 +182,7 @@ function rendererBackground() {
 function recreateRenderer() {
   const previous = renderer;
   renderer = createRenderer();
+  framePresenter.setRenderer(renderer);
   previous?.dispose();
   render();
 }
@@ -188,37 +192,11 @@ function render() {
   const width = Math.max(1, canvas.clientWidth);
   const height = Math.max(1, canvas.clientHeight);
   renderer.setSize(width, height, window.devicePixelRatio);
-  renderer.render(presentedFrame());
-}
-
-function presentedFrame() {
-  if (!currentFrame || !selectedEntity) return currentFrame;
-
-  const accent = selectionColor();
-  const nodes = [];
-  for (const node of currentFrame.nodes) {
-    if (entityIdForNode(node.id) !== selectedEntity.id) {
-      nodes.push(node);
-      continue;
-    }
-
-    nodes.push({ ...node, color: accent, opacity: 1 });
-    if (node.transform) {
-      const scale = node.transform.scale ?? [1, 1, 1];
-      nodes.push({
-        ...node,
-        id: `selection-outline/${node.id}`,
-        color: accent,
-        opacity: 1,
-        wireframe: true,
-        transform: {
-          ...node.transform,
-          scale: scale.map((value) => value * 1.06),
-        },
-      });
-    }
-  }
-  return { ...currentFrame, nodes };
+  framePresenter.render(
+    currentFrame,
+    selectedEntity?.id ?? null,
+    selectedEntity ? selectionColor() : null,
+  );
 }
 
 function selectionColor() {
@@ -247,7 +225,12 @@ async function selectScenario(scenario, updateUrl = true) {
   const canonicalScenario = await response.json();
   const session = runtime.createSession(canonicalScenario);
   const nextView = { ...OVERVIEW_VIEW };
-  const frame = validateRenderFrame(session.renderFrame(DEFAULT_FRAME_ASPECT, nextView));
+  const frame = validateSessionFrame(
+    null,
+    session.renderFrame(DEFAULT_FRAME_ASPECT, nextView),
+    validateRenderFrame,
+    validateRenderCamera,
+  );
   if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
     throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
   }
@@ -347,11 +330,6 @@ function addEntities(index, entities, kind) {
   }
 }
 
-function entityIdForNode(nodeId) {
-  const roadSegment = /^(.*)\/road-segment-\d+$/.exec(nodeId);
-  return roadSegment ? roadSegment[1] : nodeId;
-}
-
 function setSelectedEntity(selection) {
   selectedEntity = selection;
   viewFocusButton.disabled = !selection;
@@ -428,7 +406,12 @@ function formatNumber(value) {
 
 function refreshFrame() {
   if (!currentSession) return;
-  const frame = validateRenderFrame(currentSession.renderFrame(DEFAULT_FRAME_ASPECT, cameraView));
+  const frame = validateSessionFrame(
+    currentFrame,
+    currentSession.renderFrame(DEFAULT_FRAME_ASPECT, cameraView),
+    validateRenderFrame,
+    validateRenderCamera,
+  );
   if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
     throw new Error("inspection frame must declare a finite positive camera aspect");
   }

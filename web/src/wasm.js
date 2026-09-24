@@ -1,3 +1,5 @@
+import { CityRenderCache } from "./render-cache.js";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -12,7 +14,7 @@ export async function createCityGameRuntime(url = "./city-game-core.wasm") {
   return new CityGameRuntime(instance.exports);
 }
 
-class CityGameRuntime {
+export class CityGameRuntime {
   #exports;
 
   constructor(exports) {
@@ -25,6 +27,8 @@ class CityGameRuntime {
       "city_game_query",
       "city_game_render_frame",
       "city_game_render_frame_view",
+      "city_game_prepare_render",
+      "city_game_render_camera",
     ];
     for (const name of required) {
       if (!(name in exports)) {
@@ -37,15 +41,24 @@ class CityGameRuntime {
   createSession(scenario) {
     const response = requireSuccess(this.#newSave(scenario));
     let save = response.save;
+    const renderCache = new CityRenderCache(
+      (aspect) => requireSuccess(this.#prepareFrame(save, aspect)),
+      (overview, view) => requireSuccess(this.#renderCamera(overview, view)).camera,
+    );
 
     return new CityGameSession(
       (command) => {
         const commandResponse = requireSuccess(this.#execute(save, command));
         save = commandResponse.save;
-        return commandResponse.outcome;
+        const outcome = commandResponse.outcome;
+        // Only the authoritative explicit no-op receipt permits retaining geometry.
+        if (outcome?.kind !== "planning" || outcome.outcome !== "unchanged") {
+          renderCache.invalidate();
+        }
+        return outcome;
       },
       (query) => requireSuccess(this.#query(save, query)).result,
-      (aspect, view) => requireSuccess(this.#renderFrame(save, aspect, view)).frame,
+      (aspect, view) => renderCache.renderFrame(aspect, view),
     );
   }
 
@@ -77,29 +90,28 @@ class CityGameRuntime {
     );
   }
 
-  #renderFrame(save, aspect, view = OVERVIEW_VIEW) {
-    if (!Number.isFinite(aspect) || aspect <= 0) {
-      throw new Error("render aspect must be finite and positive");
-    }
-    if (view === undefined || view === null) {
-      return this.#call([save], (input) =>
-        this.#exports.city_game_render_frame(input.ptr, input.len, aspect),
-      );
-    }
-    return this.#call([save, view], (saveInput, viewInput) =>
-      this.#exports.city_game_render_frame_view(
-        saveInput.ptr,
-        saveInput.len,
+  #prepareFrame(save, aspect) {
+    return this.#call([save], (input) =>
+      this.#exports.city_game_prepare_render(input.ptr, input.len, aspect),
+    );
+  }
+
+  #renderCamera(overview, view) {
+    return this.#call([overview, view], (overviewInput, viewInput) =>
+      this.#exports.city_game_render_camera(
+        overviewInput.ptr,
+        overviewInput.len,
         viewInput.ptr,
         viewInput.len,
-        aspect,
       ),
     );
   }
 
   #call(values, invoke) {
-    const inputs = values.map((value) => this.#write(value));
+    const inputs = [];
     try {
+      // Keep earlier inputs covered by cleanup if a later serialization/allocation fails.
+      for (const value of values) inputs.push(this.#write(value));
       return this.#read(invoke(...inputs));
     } finally {
       for (const input of inputs) {

@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::{Value, json};
 
+use crate::render::{PreparedCamera, prepare_save_frame, prepared_camera_view};
 use crate::{
     CityCommand, CityQuery, CitySave, CityScenario, RenderView, build_save_render_frame,
     build_save_render_frame_with_view,
@@ -59,6 +60,25 @@ pub(crate) fn render_frame_with_view_json(save_json: &str, view_json: &str, aspe
         let frame = build_save_render_frame_with_view(&save, aspect, view)
             .map_err(|error| error.to_string())?;
         Ok(json!({ "ok": true, "frame": frame }))
+    })())
+}
+
+pub(crate) fn prepare_render_json(save_json: &str, aspect: f32) -> String {
+    encode_result((|| {
+        let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
+        let prepared = prepare_save_frame(&save, aspect).map_err(|error| error.to_string())?;
+        Ok(json!({ "ok": true, "frame": prepared.frame, "overview": prepared.overview }))
+    })())
+}
+
+pub(crate) fn render_camera_json(overview_json: &str, view_json: &str) -> String {
+    encode_result((|| {
+        let overview: PreparedCamera =
+            serde_json::from_str(overview_json).map_err(|error| error.to_string())?;
+        let view: RenderView =
+            serde_json::from_str(view_json).map_err(|error| error.to_string())?;
+        let camera = prepared_camera_view(&overview, view).map_err(|error| error.to_string())?;
+        Ok(json!({ "ok": true, "camera": camera }))
     })())
 }
 
@@ -207,5 +227,24 @@ mod tests {
                 .unwrap()
                 .contains("missing field")
         );
+    }
+
+    #[test]
+    fn prepared_transport_returns_camera_only_and_matches_full_frame() {
+        let save_json = serde_json::to_string(&CitySave::new(scenario()).unwrap()).unwrap();
+        let prepared: Value = serde_json::from_str(&prepare_render_json(&save_json, 1.0)).unwrap();
+        assert_eq!(prepared["ok"], true);
+        let view = r#"{"panX":0.25,"panY":-0.125,"zoom":2.0}"#;
+        let overview = serde_json::to_string(&prepared["overview"]).unwrap();
+        let camera: Value = serde_json::from_str(&render_camera_json(&overview, view)).unwrap();
+        let full: Value =
+            serde_json::from_str(&render_frame_with_view_json(&save_json, view, 1.0)).unwrap();
+        assert_eq!(camera["ok"], true);
+        assert_eq!(camera["camera"], full["frame"]["camera"]);
+        assert_eq!(camera.as_object().unwrap().len(), 2);
+        assert!(camera.get("save").is_none());
+        assert!(camera.get("nodes").is_none());
+        let invalid: Value = serde_json::from_str(&render_camera_json("{}", view)).unwrap();
+        assert_eq!(invalid["ok"], false);
     }
 }
