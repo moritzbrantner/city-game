@@ -160,45 +160,36 @@ struct GameWorldProjection {
 
 impl GameWorldProjection {
     fn from_scenario(scenario: &CityScenario) -> Self {
-        let mut positions = Vec::new();
-        collect_scenario_positions(scenario, &mut positions);
-        Self::from_positions(&positions)
+        let mut bounds = None;
+        visit_scenario_positions(scenario, &mut |position| {
+            extend_geographic_bounds(&mut bounds, position);
+        });
+        Self::from_bounds(bounds)
     }
 
     fn from_save(save: &CitySave) -> Self {
-        let mut positions = Vec::new();
-        collect_scenario_positions(&save.scenario, &mut positions);
+        let mut bounds = None;
+        visit_scenario_positions(&save.scenario, &mut |position| {
+            extend_geographic_bounds(&mut bounds, position);
+        });
         for road in save.world.planning.player_roads.values() {
-            collect_positions(&road.geometry, &mut positions);
+            visit_positions(&road.geometry, &mut |position| {
+                extend_geographic_bounds(&mut bounds, position);
+            });
         }
         for zone in save.world.planning.zones.values() {
-            collect_positions(&zone.geometry, &mut positions);
+            visit_positions(&zone.geometry, &mut |position| {
+                extend_geographic_bounds(&mut bounds, position);
+            });
         }
-        Self::from_positions(&positions)
+        Self::from_bounds(bounds)
     }
 
-    fn from_positions(positions: &[[f64; 2]]) -> Self {
-        let (origin_lon, origin_lat) = if positions.is_empty() {
-            (0.0, 0.0)
-        } else {
-            let min_lon = positions
-                .iter()
-                .map(|position| position[0])
-                .fold(f64::INFINITY, f64::min);
-            let max_lon = positions
-                .iter()
-                .map(|position| position[0])
-                .fold(f64::NEG_INFINITY, f64::max);
-            let min_lat = positions
-                .iter()
-                .map(|position| position[1])
-                .fold(f64::INFINITY, f64::min);
-            let max_lat = positions
-                .iter()
-                .map(|position| position[1])
-                .fold(f64::NEG_INFINITY, f64::max);
-            ((min_lon + max_lon) * 0.5, (min_lat + max_lat) * 0.5)
-        };
+    fn from_bounds(bounds: Option<GeographicBounds>) -> Self {
+        let (origin_lon, origin_lat) = bounds
+            .map(GeographicBounds::center)
+            .unwrap_or([0.0, 0.0])
+            .into();
         let latitude_meters_per_degree = 111_320.0;
         let longitude_meters_per_degree =
             latitude_meters_per_degree * origin_lat.to_radians().cos();
@@ -671,7 +662,47 @@ fn append_axis_aligned_box_fit_points(
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct GeographicBounds {
+    min_lon: f64,
+    max_lon: f64,
+    min_lat: f64,
+    max_lat: f64,
+}
+
+impl GeographicBounds {
+    fn from_position([lon, lat]: [f64; 2]) -> Self {
+        Self {
+            min_lon: lon,
+            max_lon: lon,
+            min_lat: lat,
+            max_lat: lat,
+        }
+    }
+
+    fn include(&mut self, [lon, lat]: [f64; 2]) {
+        self.min_lon = self.min_lon.min(lon);
+        self.max_lon = self.max_lon.max(lon);
+        self.min_lat = self.min_lat.min(lat);
+        self.max_lat = self.max_lat.max(lat);
+    }
+
+    fn center(self) -> [f64; 2] {
+        [
+            (self.min_lon + self.max_lon) * 0.5,
+            (self.min_lat + self.max_lat) * 0.5,
+        ]
+    }
+}
+
+fn extend_geographic_bounds(bounds: &mut Option<GeographicBounds>, position: [f64; 2]) {
+    match bounds {
+        Some(bounds) => bounds.include(position),
+        None => *bounds = Some(GeographicBounds::from_position(position)),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct ProjectedBounds {
     min_x: f32,
     max_x: f32,
@@ -679,29 +710,37 @@ struct ProjectedBounds {
     max_z: f32,
 }
 
+impl ProjectedBounds {
+    fn from_position([x, z]: [f32; 2]) -> Self {
+        Self {
+            min_x: x,
+            max_x: x,
+            min_z: z,
+            max_z: z,
+        }
+    }
+
+    fn include(&mut self, [x, z]: [f32; 2]) {
+        self.min_x = self.min_x.min(x);
+        self.max_x = self.max_x.max(x);
+        self.min_z = self.min_z.min(z);
+        self.max_z = self.max_z.max(z);
+    }
+}
+
 fn projected_bounds(
     geometry: &Geometry,
     projection: GameWorldProjection,
 ) -> Option<ProjectedBounds> {
-    let mut positions = Vec::new();
-    collect_positions(geometry, &mut positions);
-    let mut projected = positions
-        .into_iter()
-        .map(|position| projection.project(position));
-    let [first_x, first_z] = projected.next()?;
-    let mut bounds = ProjectedBounds {
-        min_x: first_x,
-        max_x: first_x,
-        min_z: first_z,
-        max_z: first_z,
-    };
-    for [x, z] in projected {
-        bounds.min_x = bounds.min_x.min(x);
-        bounds.max_x = bounds.max_x.max(x);
-        bounds.min_z = bounds.min_z.min(z);
-        bounds.max_z = bounds.max_z.max(z);
-    }
-    Some(bounds)
+    let mut bounds = None;
+    visit_positions(geometry, &mut |position| {
+        let projected = projection.project(position);
+        match &mut bounds {
+            Some(bounds) => bounds.include(projected),
+            None => bounds = Some(ProjectedBounds::from_position(projected)),
+        }
+    });
+    bounds
 }
 
 fn road_width(class: RoadClass) -> f32 {
@@ -732,21 +771,21 @@ fn zone_color(kind: ZoneKind) -> u32 {
     }
 }
 
-fn collect_scenario_positions(scenario: &CityScenario, output: &mut Vec<[f64; 2]>) {
+fn visit_scenario_positions(scenario: &CityScenario, visitor: &mut impl FnMut([f64; 2])) {
     for road in &scenario.roads {
-        collect_positions(&road.geometry, output);
+        visit_positions(&road.geometry, visitor);
     }
     for building in &scenario.buildings {
-        collect_positions(&building.footprint, output);
+        visit_positions(&building.footprint, visitor);
     }
     for water in &scenario.water {
-        collect_positions(&water.geometry, output);
+        visit_positions(&water.geometry, visitor);
     }
     for land_use in &scenario.land_use_areas {
-        collect_positions(&land_use.geometry, output);
+        visit_positions(&land_use.geometry, visitor);
     }
     for transit in &scenario.transit_anchors {
-        collect_positions(&transit.geometry, output);
+        visit_positions(&transit.geometry, visitor);
     }
 }
 
@@ -779,27 +818,33 @@ fn visit_lines(geometry: &Geometry, visitor: &mut impl FnMut(&[[f64; 2]])) {
     }
 }
 
-fn collect_positions(geometry: &Geometry, output: &mut Vec<[f64; 2]>) {
+fn visit_positions(geometry: &Geometry, visitor: &mut impl FnMut([f64; 2])) {
     match geometry {
-        Geometry::Point { coordinates } => output.push(*coordinates),
+        Geometry::Point { coordinates } => visitor(*coordinates),
         Geometry::MultiPoint { coordinates } | Geometry::LineString { coordinates } => {
-            output.extend(coordinates.iter().copied());
+            for &position in coordinates {
+                visitor(position);
+            }
         }
         Geometry::MultiLineString { coordinates } | Geometry::Polygon { coordinates } => {
             for line in coordinates {
-                output.extend(line.iter().copied());
+                for &position in line {
+                    visitor(position);
+                }
             }
         }
         Geometry::MultiPolygon { coordinates } => {
             for polygon in coordinates {
                 for line in polygon {
-                    output.extend(line.iter().copied());
+                    for &position in line {
+                        visitor(position);
+                    }
                 }
             }
         }
         Geometry::GeometryCollection { geometries } => {
             for geometry in geometries {
-                collect_positions(geometry, output);
+                visit_positions(geometry, visitor);
             }
         }
     }
