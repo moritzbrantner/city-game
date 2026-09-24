@@ -73,7 +73,10 @@ fn main() {
         .map(|_| measure_render(&scenario, buildings))
         .collect();
 
-    let elapsed: Vec<_> = measurements.iter().map(|sample| sample.elapsed_ns).collect();
+    let elapsed: Vec<_> = measurements
+        .iter()
+        .map(|sample| sample.elapsed_ns)
+        .collect();
     let allocation_counts: Vec<_> = measurements
         .iter()
         .map(|sample| sample.allocations)
