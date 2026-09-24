@@ -210,6 +210,32 @@ test("selected-entity bounds project only that entity instead of rescanning the 
   assert.equal(reference.observations.nodeVisits, nodes.length);
 });
 
+test("subpixel area clamping still reaches kind-priority tie breaking", () => {
+  const nodes = [
+    {
+      id: "road/tiny/road-segment-0",
+      geometry: { kind: "box", size: [0.0005, 0.0005, 0.02] },
+      color: 0xffffff,
+      transform: { translation: [0, 0, 0.5] },
+    },
+    {
+      id: "building/tiny",
+      geometry: { kind: "box", size: [0.0008, 0.0008, 0.02] },
+      color: 0xffffff,
+      transform: { translation: [0, 0, 0.5] },
+    },
+  ];
+  const current = frame(nodes, OVERVIEW);
+  const index = new CityPickingIndex(current, OVERVIEW);
+  const input = pointer(640, 360);
+
+  const fast = index.pick(current, OVERVIEW, input, kindForEntity);
+  const reference = pickNodeLinear(current, input, kindForEntity);
+  assert.equal(reference.node?.id, "building/tiny");
+  assert.equal(fast.node?.id, reference.node?.id);
+  assert.equal(fast.observations.directHit, true);
+});
+
 test("large scene-covering boxes stay correct without exploding grid references", () => {
   const nodes = gridNodes(512);
   nodes.push({
