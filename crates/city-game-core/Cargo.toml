@@ -31,3 +31,7 @@ harness = false
 [[bench]]
 name = "render_frame"
 harness = false
+
+[[bench]]
+name = "save_render_roads"
+harness = false
