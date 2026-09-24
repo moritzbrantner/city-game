@@ -52,3 +52,6 @@ cargo bench --locked --quiet -p city-game-core --bench fixed_step -- --smoke
 # The render benchmark blocks on measured allocation-call/byte ceilings and retains timing only
 # as advisory evidence. The checked-in budget may only change through an explained review.
 cargo bench --locked --quiet -p city-game-core --bench render_frame -- --smoke
+
+# Save-render road benchmark measures temporary effective-road materialization cost.
+cargo bench --locked --quiet -p city-game-core --bench save_render_roads -- --smoke
