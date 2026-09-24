@@ -93,11 +93,16 @@ for (const entry of manifest.scenarios) {
       assert.ok(
         fast.observations.candidateBoundsEvaluations <=
           budget.maxCandidateBoundsEvaluationsPerPick,
-        JSON.stringify(fast.observations),
+        `${entry.id} absolute candidate budget: ${JSON.stringify(fast.observations)}`,
+      );
+      assert.ok(
+        fast.observations.candidateBoundsEvaluations / frame.nodes.length <=
+          budget.maxCandidateFractionPerPick,
+        `${entry.id} relative candidate budget: ${JSON.stringify(fast.observations)}`,
       );
       assert.ok(
         fast.observations.projectionCalls <= budget.maxCandidateProjectionCallsPerPick,
-        JSON.stringify(fast.observations),
+        `${entry.id} projection budget: ${JSON.stringify(fast.observations)}`,
       );
 
       maxCandidateBoundsEvaluations = Math.max(
