@@ -148,6 +148,7 @@ test("21k-node stress queries stay bounded after one index build", () => {
   const queryMs = performance.now() - queryStart;
 
   assert.ok(maxBounds <= budget.maxCandidateBoundsEvaluationsPerPick, `max exact candidates: ${maxBounds}`);
+  assert.ok(maxBounds / nodes.length <= budget.maxCandidateFractionPerPick, `max candidate fraction: ${maxBounds / nodes.length}`);
   assert.ok(maxProjectionCalls <= budget.maxCandidateProjectionCallsPerPick, `max projection calls: ${maxProjectionCalls}`);
   console.log(JSON.stringify({
     benchmark: "picking-index-structural",
