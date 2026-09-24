@@ -231,17 +231,16 @@ export class CityPickingIndex {
     }
 
     const indices = this.#entityItems.get(entityId) ?? [];
-    const projector = createWorldProjector(frame.camera, { width, height });
     let combined = null;
     for (const itemIndex of indices) {
       work.nodeVisits++;
-      const bounds = projectNodeBoundsWithProjector(
-        this.#items[itemIndex].node,
-        projector,
-        work,
+      const bounds = screenBoundsFromOverview(
+        this.#items[itemIndex],
+        normalizedView,
+        width,
+        height,
       );
       work.boundsEvaluations++;
-      if (!bounds) continue;
       combined = combined
         ? unionScreenBounds(combined, bounds)
         : { minX: bounds.minX, maxX: bounds.maxX, minY: bounds.minY, maxY: bounds.maxY };
