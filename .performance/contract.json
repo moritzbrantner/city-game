@@ -98,6 +98,51 @@
           "notes": "Planned composition counter; generic camera/rendering internals remain owned by 3d-lab rather than duplicated here."
         }
       ]
+    },
+    {
+      "id": "render-frame-coordinate-streaming",
+      "kind": "scaling",
+      "description": "Build a large synthetic building scene while preventing temporary coordinate materializations from returning to projection and area-bounds preparation.",
+      "dimensions": {
+        "buildings": 4096,
+        "vertices_per_building": 64,
+        "samples": 7,
+        "budget": ".performance/render-frame-budget.json"
+      },
+      "correctnessEvidence": [
+        "streamed geometry visitation preserves materialized coordinate order",
+        "streamed geographic projection matches the legacy materialized calculation exactly",
+        "streamed projected bounds match the legacy materialized calculation exactly",
+        "empty geometry preserves the existing projection and bounds defaults",
+        "all measured smoke samples stay within the reviewed allocation ceilings",
+        "deliberate one-allocation and one-byte regressions are rejected by the budget oracle"
+      ],
+      "metrics": [
+        {
+          "name": "allocation_calls",
+          "unit": "allocations",
+          "direction": "lower",
+          "signal": "operation-count",
+          "blocking": true,
+          "budget": 4122
+        },
+        {
+          "name": "allocated_bytes",
+          "unit": "bytes",
+          "direction": "lower",
+          "signal": "allocation-volume",
+          "blocking": true,
+          "budget": 2068048
+        },
+        {
+          "name": "elapsed_ns",
+          "unit": "ns",
+          "direction": "lower",
+          "signal": "wall-clock",
+          "blocking": false,
+          "notes": "Repeated native timing is retained as advisory evidence; shared-runner wall-clock variance is not a correctness gate."
+        }
+      ]
     }
   ]
 }
