@@ -306,7 +306,22 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let mut fit_points = Vec::new();
     let planning = &save.world.planning;
 
-    for road in save.effective_roads() {
+    // Rendering needs borrowed road semantics, not the cloned/sorted EffectiveRoad query
+    // projection. Nodes are sorted once at the frame boundary below.
+    for road in &save.scenario.roads {
+        if planning.is_suppressed(&road.id) {
+            continue;
+        }
+        append_road_nodes(
+            &road.id,
+            &road.geometry,
+            road.class,
+            projection,
+            &mut nodes,
+            &mut fit_points,
+        );
+    }
+    for road in planning.player_roads.values() {
         append_road_nodes(
             &road.id,
             &road.geometry,
@@ -987,6 +1002,36 @@ mod tests {
                 .any(|node| node.id == "player/road/1/road-segment-0")
         );
         assert!(frame.nodes.iter().any(|node| node.id == "player/zone/1"));
+    }
+
+    #[test]
+    fn save_frame_road_membership_matches_effective_road_query_without_query_materialization() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.apply_planning(PlanningCommand::AddRoad {
+            road: PlannedRoad {
+                id: "player/road/borrowed".to_owned(),
+                geometry: Geometry::LineString {
+                    coordinates: vec![[8.002, 48.0], [8.003, 48.001]],
+                },
+                class: RoadClass::Primary,
+                name: Some("Borrowed Road".to_owned()),
+            },
+        })
+        .unwrap();
+
+        let expected = save
+            .effective_roads()
+            .into_iter()
+            .map(|road| road.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        let frame = build_save_render_frame(&save, 1.0).unwrap();
+        let actual = frame
+            .nodes
+            .iter()
+            .filter_map(|node| node.id.split_once("/road-segment-").map(|(id, _)| id.to_owned()))
+            .collect::<std::collections::BTreeSet<_>>();
+
+        assert_eq!(actual, expected);
     }
 
     #[test]
