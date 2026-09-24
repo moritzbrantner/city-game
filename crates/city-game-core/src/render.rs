@@ -186,9 +186,7 @@ impl GameWorldProjection {
     }
 
     fn from_bounds(bounds: Option<GeographicBounds>) -> Self {
-        let [origin_lon, origin_lat] = bounds
-            .map(GeographicBounds::center)
-            .unwrap_or([0.0, 0.0]);
+        let [origin_lon, origin_lat] = bounds.map(GeographicBounds::center).unwrap_or([0.0, 0.0]);
         let latitude_meters_per_degree = 111_320.0;
         let longitude_meters_per_degree =
             latitude_meters_per_degree * origin_lat.to_radians().cos();
