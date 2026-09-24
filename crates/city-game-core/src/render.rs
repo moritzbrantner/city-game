@@ -1055,6 +1055,149 @@ mod tests {
         assert!((fitted_aspect - aspect).abs() <= 1.0e-5);
     }
 
+    fn legacy_collect_positions(geometry: &Geometry, output: &mut Vec<[f64; 2]>) {
+        match geometry {
+            Geometry::Point { coordinates } => output.push(*coordinates),
+            Geometry::MultiPoint { coordinates } | Geometry::LineString { coordinates } => {
+                output.extend(coordinates.iter().copied());
+            }
+            Geometry::MultiLineString { coordinates } | Geometry::Polygon { coordinates } => {
+                for line in coordinates {
+                    output.extend(line.iter().copied());
+                }
+            }
+            Geometry::MultiPolygon { coordinates } => {
+                for polygon in coordinates {
+                    for line in polygon {
+                        output.extend(line.iter().copied());
+                    }
+                }
+            }
+            Geometry::GeometryCollection { geometries } => {
+                for geometry in geometries {
+                    legacy_collect_positions(geometry, output);
+                }
+            }
+        }
+    }
+
+    fn legacy_projection_from_positions(positions: &[[f64; 2]]) -> GameWorldProjection {
+        let (origin_lon, origin_lat) = if positions.is_empty() {
+            (0.0, 0.0)
+        } else {
+            let min_lon = positions
+                .iter()
+                .map(|position| position[0])
+                .fold(f64::INFINITY, f64::min);
+            let max_lon = positions
+                .iter()
+                .map(|position| position[0])
+                .fold(f64::NEG_INFINITY, f64::max);
+            let min_lat = positions
+                .iter()
+                .map(|position| position[1])
+                .fold(f64::INFINITY, f64::min);
+            let max_lat = positions
+                .iter()
+                .map(|position| position[1])
+                .fold(f64::NEG_INFINITY, f64::max);
+            ((min_lon + max_lon) * 0.5, (min_lat + max_lat) * 0.5)
+        };
+        let latitude_meters_per_degree = 111_320.0;
+        GameWorldProjection {
+            origin_lon,
+            origin_lat,
+            longitude_meters_per_degree: latitude_meters_per_degree
+                * origin_lat.to_radians().cos(),
+            latitude_meters_per_degree,
+        }
+    }
+
+    fn legacy_projected_bounds(
+        geometry: &Geometry,
+        projection: GameWorldProjection,
+    ) -> Option<ProjectedBounds> {
+        let mut positions = Vec::new();
+        legacy_collect_positions(geometry, &mut positions);
+        let mut projected = positions
+            .into_iter()
+            .map(|position| projection.project(position));
+        let [first_x, first_z] = projected.next()?;
+        let mut bounds = ProjectedBounds::from_position([first_x, first_z]);
+        for projected in projected {
+            bounds.include(projected);
+        }
+        Some(bounds)
+    }
+
+    #[test]
+    fn streamed_coordinate_bounds_match_materialized_reference_exactly() {
+        let geometry = Geometry::GeometryCollection {
+            geometries: vec![
+                Geometry::Point {
+                    coordinates: [7.999, 48.002],
+                },
+                Geometry::MultiPoint {
+                    coordinates: vec![[8.004, 47.998], [8.006, 48.005]],
+                },
+                Geometry::MultiLineString {
+                    coordinates: vec![
+                        vec![[8.0, 48.0], [8.001, 48.001]],
+                        vec![[8.002, 47.999], [8.003, 48.004]],
+                    ],
+                },
+                Geometry::MultiPolygon {
+                    coordinates: vec![vec![vec![
+                        [8.01, 48.01],
+                        [8.012, 48.01],
+                        [8.012, 48.012],
+                        [8.01, 48.01],
+                    ]]],
+                },
+            ],
+        };
+
+        let mut streamed_positions = Vec::new();
+        visit_positions(&geometry, &mut |position| streamed_positions.push(position));
+        let mut materialized_positions = Vec::new();
+        legacy_collect_positions(&geometry, &mut materialized_positions);
+        assert_eq!(streamed_positions, materialized_positions);
+
+        let reference_projection = legacy_projection_from_positions(&materialized_positions);
+        let mut geographic_bounds = None;
+        visit_positions(&geometry, &mut |position| {
+            extend_geographic_bounds(&mut geographic_bounds, position);
+        });
+        let streamed_projection = GameWorldProjection::from_bounds(geographic_bounds);
+
+        assert_eq!(streamed_projection.origin_lon, reference_projection.origin_lon);
+        assert_eq!(streamed_projection.origin_lat, reference_projection.origin_lat);
+        assert_eq!(
+            streamed_projection.longitude_meters_per_degree,
+            reference_projection.longitude_meters_per_degree
+        );
+        assert_eq!(
+            streamed_projection.latitude_meters_per_degree,
+            reference_projection.latitude_meters_per_degree
+        );
+        assert_eq!(
+            projected_bounds(&geometry, streamed_projection),
+            legacy_projected_bounds(&geometry, reference_projection)
+        );
+    }
+
+    #[test]
+    fn streamed_projection_preserves_empty_geometry_defaults() {
+        let geometry = Geometry::GeometryCollection {
+            geometries: Vec::new(),
+        };
+        let projection = GameWorldProjection::from_bounds(None);
+
+        assert_eq!(projection.origin_lon, 0.0);
+        assert_eq!(projection.origin_lat, 0.0);
+        assert_eq!(projected_bounds(&geometry, projection), None);
+    }
+
     #[test]
     fn invalid_viewport_aspect_fails_closed() {
         assert_eq!(
