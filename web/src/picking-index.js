@@ -1,7 +1,6 @@
 import { projectWorldPoint } from "@moritzbrantner/three-d-renderer";
 import { entityIdForNode } from "./frame-presenter.js";
 
-const NORMALIZED_VIEWPORT = Object.freeze({ width: 1, height: 1 });
 const TARGET_ITEMS_PER_CELL = 8;
 const MIN_GRID_SIZE = 8;
 const MAX_GRID_SIZE = 96;
@@ -10,7 +9,6 @@ const QUERY_EPSILON = 1e-6;
 
 export class CityPickingIndex {
   #nodes;
-  #buildView;
   #viewMatrix;
   #projectionInvariant;
   #overviewProjection;
@@ -27,14 +25,14 @@ export class CityPickingIndex {
 
   constructor(frame, view) {
     requireFrame(frame);
-    this.#buildView = normalizeView(view);
+    const buildView = normalizeView(view);
     this.#nodes = frame.nodes;
     this.#viewMatrix = [...frame.camera.viewMatrix];
     this.#aspect = frame.camera.aspect;
     this.#projectionInvariant = frame.camera.projectionMatrix.map((value, index) =>
       isViewProjectionComponent(index) ? null : value,
     );
-    this.#overviewProjection = overviewProjection(frame.camera.projectionMatrix, this.#buildView);
+    this.#overviewProjection = overviewProjection(frame.camera.projectionMatrix, buildView);
 
     const buildWork = {
       nodeVisits: 0,
@@ -59,7 +57,7 @@ export class CityPickingIndex {
         continue;
       }
 
-      const canonical = boundsToOverview(bounds, this.#buildView);
+      const canonical = boundsToOverview(bounds, buildView);
       const item = {
         node,
         entityId: entityIdForNode(node.id),
@@ -67,6 +65,7 @@ export class CityPickingIndex {
         maxX: canonical.maxX,
         minY: canonical.minY,
         maxY: canonical.maxY,
+        depth: bounds.depth,
       };
       const itemIndex = this.#items.length;
       this.#items.push(item);
@@ -174,15 +173,14 @@ export class CityPickingIndex {
     let best = null;
     for (const itemIndex of candidates) {
       const item = this.#items[itemIndex];
-      const bounds = projectNodeBounds(
-        frame.camera,
-        item.node,
+      const bounds = screenBoundsFromOverview(
+        item,
+        normalizedView,
         normalizedPointer.width,
         normalizedPointer.height,
-        work,
       );
       work.candidateBoundsEvaluations++;
-      if (!bounds || !pointerIntersectsBounds(normalizedPointer, bounds, slop)) continue;
+      if (!pointerIntersectsBounds(normalizedPointer, bounds, slop)) continue;
       const candidate = scoredCandidate(
         item.node,
         item.entityId,
@@ -413,6 +411,14 @@ function pointerToOverview(pointer, view) {
     x: 0.5 + view.panX + (pointer.x / pointer.width - 0.5) / view.zoom,
     y: 0.5 - view.panY + (pointer.y / pointer.height - 0.5) / view.zoom,
   };
+}
+
+function screenBoundsFromOverview(item, view, width, height) {
+  const minX = (0.5 + view.zoom * (item.minX - 0.5 - view.panX)) * width;
+  const maxX = (0.5 + view.zoom * (item.maxX - 0.5 - view.panX)) * width;
+  const minY = (0.5 + view.zoom * (item.minY - 0.5 + view.panY)) * height;
+  const maxY = (0.5 + view.zoom * (item.maxY - 0.5 + view.panY)) * height;
+  return { minX, maxX, minY, maxY, depth: item.depth };
 }
 
 function boundsToOverview(bounds, view) {
