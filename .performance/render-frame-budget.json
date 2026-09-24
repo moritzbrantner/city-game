@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "suite": "city-game/render-coordinate-streaming-v1",
+  "baselineSource": "320463d1e734639f0a9038548249f138cf09eaf7",
+  "baselineRun": "35936708363",
+  "candidateSource": "fdddfeeb104a9cbf3bcc82d3f3099d8256106daf",
+  "candidateRun": "35936988064",
+  "buildings": 4096,
+  "verticesPerBuilding": 64,
+  "samples": 7,
+  "baseline": {
+    "medianAllocationCalls": 8231,
+    "medianAllocatedBytes": 14846528,
+    "medianNs": 2694802
+  },
+  "maxAllocationCalls": 4122,
+  "maxAllocatedBytes": 2068048,
+  "candidateTiming": {
+    "medianNs": 1957637,
+    "p95Ns": 2036395,
+    "blocking": false
+  },
+  "policy": "Allocation ceilings are blocking and come from the measured streaming candidate on the same locked toolchain and synthetic scene. Timing remains advisory. Do not regenerate or relax the ceilings automatically; representation changes require an explained reviewed baseline update with correctness evidence."
+}
