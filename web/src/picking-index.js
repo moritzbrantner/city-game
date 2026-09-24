@@ -1,4 +1,4 @@
-import { projectWorldPoint } from "@moritzbrantner/three-d-renderer";
+import { createWorldProjector } from "@moritzbrantner/three-d-renderer";
 import { entityIdForNode } from "./frame-presenter.js";
 
 const TARGET_ITEMS_PER_CELL = 8;
@@ -42,16 +42,11 @@ export class CityPickingIndex {
       cellReferences: 0,
       wideItems: 0,
     };
+    const buildProjector = createWorldProjector(frame.camera, { width: 1, height: 1 });
 
     for (const node of frame.nodes) {
       buildWork.nodeVisits++;
-      const bounds = projectNodeBounds(
-        frame.camera,
-        node,
-        1,
-        1,
-        buildWork,
-      );
+      const bounds = projectNodeBoundsWithProjector(node, buildProjector, buildWork);
       if (!bounds) {
         buildWork.skippedNodes++;
         continue;
@@ -236,14 +231,13 @@ export class CityPickingIndex {
     }
 
     const indices = this.#entityItems.get(entityId) ?? [];
+    const projector = createWorldProjector(frame.camera, { width, height });
     let combined = null;
     for (const itemIndex of indices) {
       work.nodeVisits++;
-      const bounds = projectNodeBounds(
-        frame.camera,
+      const bounds = projectNodeBoundsWithProjector(
         this.#items[itemIndex].node,
-        width,
-        height,
+        projector,
         work,
       );
       work.boundsEvaluations++;
@@ -371,16 +365,14 @@ export function pickNodeLinear(frame, pointer, kindForEntity = () => undefined) 
   const normalizedPointer = normalizePointer(pointer);
   const slop = pickSlop(normalizedPointer.pointerType);
   const work = { nodeVisits: 0, boundsEvaluations: 0, projectionCalls: 0 };
+  const projector = createWorldProjector(frame.camera, {
+    width: normalizedPointer.width,
+    height: normalizedPointer.height,
+  });
   let best = null;
   for (const node of frame.nodes) {
     work.nodeVisits++;
-    const bounds = projectNodeBounds(
-      frame.camera,
-      node,
-      normalizedPointer.width,
-      normalizedPointer.height,
-      work,
-    );
+    const bounds = projectNodeBoundsWithProjector(node, projector, work);
     work.boundsEvaluations++;
     if (!bounds || !pointerIntersectsBounds(normalizedPointer, bounds, slop)) continue;
     const entityId = entityIdForNode(node.id);
@@ -400,11 +392,12 @@ export function entityScreenBoundsLinear(frame, entityId, width, height) {
   requireFrame(frame);
   requireViewport(width, height);
   const work = { nodeVisits: 0, boundsEvaluations: 0, projectionCalls: 0 };
+  const projector = createWorldProjector(frame.camera, { width, height });
   let combined = null;
   for (const node of frame.nodes) {
     work.nodeVisits++;
     if (entityIdForNode(node.id) !== entityId) continue;
-    const bounds = projectNodeBounds(frame.camera, node, width, height, work);
+    const bounds = projectNodeBoundsWithProjector(node, projector, work);
     work.boundsEvaluations++;
     if (!bounds) continue;
     combined = combined
@@ -416,6 +409,14 @@ export function entityScreenBoundsLinear(frame, entityId, width, height) {
 
 export function projectNodeBounds(camera, node, width, height, work = null) {
   requireViewport(width, height);
+  return projectNodeBoundsWithProjector(
+    node,
+    createWorldProjector(camera, { width, height }),
+    work,
+  );
+}
+
+function projectNodeBoundsWithProjector(node, project, work = null) {
   if (node.geometry?.kind !== "box") return null;
   const [sizeX, sizeY, sizeZ] = node.geometry.size;
   const projected = [];
@@ -423,7 +424,7 @@ export function projectNodeBounds(camera, node, width, height, work = null) {
     for (const y of [-sizeY * 0.5, sizeY * 0.5]) {
       for (const z of [-sizeZ * 0.5, sizeZ * 0.5]) {
         const worldPoint = transformNodePoint(node, [x, y, z]);
-        const point = projectWorldPoint(camera, worldPoint, { width, height });
+        const point = project(worldPoint);
         if (work) work.projectionCalls++;
         if (point.visible) projected.push(point);
       }
