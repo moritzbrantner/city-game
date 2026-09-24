@@ -1170,8 +1170,14 @@ mod tests {
         });
         let streamed_projection = GameWorldProjection::from_bounds(geographic_bounds);
 
-        assert_eq!(streamed_projection.origin_lon, reference_projection.origin_lon);
-        assert_eq!(streamed_projection.origin_lat, reference_projection.origin_lat);
+        assert_eq!(
+            streamed_projection.origin_lon,
+            reference_projection.origin_lon
+        );
+        assert_eq!(
+            streamed_projection.origin_lat,
+            reference_projection.origin_lat
+        );
         assert_eq!(
             streamed_projection.longitude_meters_per_degree,
             reference_projection.longitude_meters_per_degree
