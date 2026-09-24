@@ -10,7 +10,9 @@ use city_game_core::{
     ScenarioProvenance, build_render_frame,
 };
 use geo_core::Geometry;
-use serde_json::json;
+use serde_json::{Value, json};
+
+const BUDGET_JSON: &str = include_str!("../../../.performance/render-frame-budget.json");
 
 struct CountingAllocator;
 
@@ -56,10 +58,24 @@ struct Sample {
     allocated_bytes: u64,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct AllocationBudget {
+    buildings: usize,
+    vertices_per_building: usize,
+    samples: usize,
+    max_allocation_calls: u64,
+    max_allocated_bytes: u64,
+}
+
 fn main() {
     let smoke = std::env::args().any(|argument| argument == "--smoke");
+    let budget = load_budget();
     let (buildings, vertices, samples) = if smoke {
-        (4_096, 64, 7)
+        (
+            budget.buildings,
+            budget.vertices_per_building,
+            budget.samples,
+        )
     } else {
         (16_384, 96, 9)
     };
@@ -72,6 +88,35 @@ fn main() {
     let measurements: Vec<_> = (0..samples)
         .map(|_| measure_render(&scenario, buildings))
         .collect();
+
+    if smoke {
+        for sample in &measurements {
+            assert!(
+                within_allocation_budget(*sample, budget),
+                "render allocation budget exceeded: {sample:?}; budget={budget:?}"
+            );
+        }
+
+        let calls_regression = Sample {
+            elapsed_ns: 0,
+            allocations: budget.max_allocation_calls + 1,
+            allocated_bytes: budget.max_allocated_bytes,
+        };
+        assert!(
+            !within_allocation_budget(calls_regression, budget),
+            "allocation-call negative control must fail"
+        );
+
+        let bytes_regression = Sample {
+            elapsed_ns: 0,
+            allocations: budget.max_allocation_calls,
+            allocated_bytes: budget.max_allocated_bytes + 1,
+        };
+        assert!(
+            !within_allocation_budget(bytes_regression, budget),
+            "allocated-byte negative control must fail"
+        );
+    }
 
     let elapsed: Vec<_> = measurements
         .iter()
@@ -98,13 +143,50 @@ fn main() {
             "p95Ns": percentile95(&elapsed),
             "medianAllocationCalls": median(&allocation_counts),
             "medianAllocatedBytes": median(&allocated_bytes),
+            "maxAllocationCalls": if smoke { Some(budget.max_allocation_calls) } else { None },
+            "maxAllocatedBytes": if smoke { Some(budget.max_allocated_bytes) } else { None },
             "elapsedSamplesNs": elapsed,
             "allocationCallSamples": allocation_counts,
             "allocatedByteSamples": allocated_bytes,
             "timing": "advisory-host-local",
-            "allocationCounts": "deterministic-hot-path-observation"
+            "allocationBudget": if smoke { "blocking" } else { "observation-only" }
         })
     );
+}
+
+fn load_budget() -> AllocationBudget {
+    let value: Value = serde_json::from_str(BUDGET_JSON).expect("render budget JSON must parse");
+    AllocationBudget {
+        buildings: usize::try_from(
+            value["buildings"]
+                .as_u64()
+                .expect("render budget buildings must be u64"),
+        )
+        .expect("render budget buildings fit usize"),
+        vertices_per_building: usize::try_from(
+            value["verticesPerBuilding"]
+                .as_u64()
+                .expect("render budget verticesPerBuilding must be u64"),
+        )
+        .expect("render budget vertices fit usize"),
+        samples: usize::try_from(
+            value["samples"]
+                .as_u64()
+                .expect("render budget samples must be u64"),
+        )
+        .expect("render budget samples fit usize"),
+        max_allocation_calls: value["maxAllocationCalls"]
+            .as_u64()
+            .expect("render budget maxAllocationCalls must be u64"),
+        max_allocated_bytes: value["maxAllocatedBytes"]
+            .as_u64()
+            .expect("render budget maxAllocatedBytes must be u64"),
+    }
+}
+
+fn within_allocation_budget(sample: Sample, budget: AllocationBudget) -> bool {
+    sample.allocations <= budget.max_allocation_calls
+        && sample.allocated_bytes <= budget.max_allocated_bytes
 }
 
 fn measure_render(scenario: &CityScenario, expected_nodes: usize) -> Sample {
