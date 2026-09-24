@@ -10,6 +10,6 @@
     "build": "bun run test:render-cache && bun run test:render-wasm && rm -rf dist && bun build src/main.js src/surface.js src/route.js --outdir dist --target browser --external=@moritzbrantner/settings-browser --external=@moritzbrantner/input-bindings-browser && mkdir -p dist/scenarios dist/evidence && cp index.html src/style.css src/enhancements.css public/scenarios.json public/city-game-core.wasm dist/ && cp public/scenarios/*.json dist/scenarios/ && cp ../.artifacts/performance/camera-navigation.json dist/evidence/ && bun run test:browser"
   },
   "dependencies": {
-    "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#7115b76ff55942ed7e85f3c8aecb70aec24b7d91"
+    "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#0d4f625876ebe774d653caa3b73d68cff826e0b8"
   }
 }
