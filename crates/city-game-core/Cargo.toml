@@ -27,3 +27,7 @@ protobuf.workspace = true
 [[bench]]
 name = "fixed_step"
 harness = false
+
+[[bench]]
+name = "render_frame"
+harness = false
