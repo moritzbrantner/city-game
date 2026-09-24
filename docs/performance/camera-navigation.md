@@ -13,6 +13,14 @@ Aspect changes replace the bounded one-entry cache. Failed preparation/camera op
 cannot publish partial data. Every view is relative to the fitted overview, not the last
 camera, avoiding accumulated drift.
 
+The browser presentation layer follows the same retained identity. When the runtime returns
+the same node array, only the camera contract is revalidated. `CityFramePresenter` keeps
+the last submitted scene and calls the shared 3d-lab `renderCamera` fast path, which draws
+the retained Three.js scene without scene-node/resource reconciliation. Full validation and
+full `render(frame)` remain mandatory whenever the node array changes. Selection decoration
+is materialized once per `(node array, selected entity, accent)` and reused while the camera
+moves; a selection, accent, or scene change submits a fresh full scene.
+
 ## Blocking contract
 
 `.performance/navigation-budget.json` records the accepted PR #41 source and run. The
@@ -28,8 +36,13 @@ input/output allocations, or steady-state WASM memory growth. Native correctness
 continue to run independently in Validate. Neither timing nor a faster wrong answer can
 replace correctness evidence.
 
-The Node tests also use a guarded node array to reject any traversal during 10,000 camera
-changes. Actual production-cache mutation tests intentionally reintroduce six faults:
+The Node tests use guarded node arrays at both retention boundaries. One cache test rejects
+any traversal during 10,000 WASM camera changes. A presentation test first submits a
+21,451-node scene, then requires 10,000 camera frames to perform zero additional node reads
+and zero full renderer submissions. The same test covers selected-scene decoration reuse,
+selection/accent changes, renderer replacement, and changed-node fallback to full validation.
+
+Actual production-cache mutation tests intentionally reintroduce six faults:
 per-view rebuilding, copied node arrays, duplicate-view work, missing mutation invalidation,
 missing aspect invalidation, and retaining a caller-owned mutable view object. The oracle
 must accept the original implementation and reject each syntactically valid mutant.
@@ -55,6 +68,8 @@ manifest supplies the existing demo geometry; it does not replace the renderer o
 The test exercises zoom/overview, unchanged-view no-op, building selection, focus,
 unmodified drag, cancelled/foreign pointers, coalesced Shift-drag, CSS resize, and scenario
 switch reset. Camera-only movement must not rebuild scenes or upload geometry to WebGL.
+The displayed GPU projection must still match Rust for zoom and pan. Structural Node tests
+cover the CPU-side zero-node-visit requirement that buffer-upload checks alone cannot prove.
 
 Optional external settings/input distributions are deliberately blocked in this offline
 lane. This proves core buttons/pointer interactions and graceful optional-module absence,
@@ -66,8 +81,10 @@ of silently skipping. `CITY_GAME_CHROME` can name an installed browser executabl
 Correctness/work-count runs and timings are separate. Timings use two warmups followed by
 seven alternating-order legacy/cached pairs, reporting median, p95, minimum, maximum and
 sample count. Preparation is measured separately. These are advisory local JS/WASM timings,
-not network traffic, browser FPS, or a claim that the whole renderer is constant-time.
-A regression that changes cost without changing the structural counters may still require
+not network traffic or browser FPS. With a retained scene, the city-game presentation layer
+and shared renderer camera submission are now constant in scene-node count; the Three.js/WebGL
+draw itself can still scale with visible GPU work. A regression that changes cost without
+changing the structural counters may still require
 review of timing evidence or a controlled-machine profiler. No finite test suite guarantees
 all future correctness or the absence of every possible slowdown.
 
