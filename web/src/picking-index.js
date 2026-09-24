@@ -66,6 +66,10 @@ export class CityPickingIndex {
         minY: canonical.minY,
         maxY: canonical.maxY,
         depth: bounds.depth,
+        area: Math.max(
+          Number.EPSILON,
+          (canonical.maxX - canonical.minX) * (canonical.maxY - canonical.minY),
+        ),
       };
       const itemIndex = this.#items.length;
       this.#items.push(item);
@@ -108,6 +112,12 @@ export class CityPickingIndex {
         }
       }
     }
+    const byAreaThenId = (leftIndex, rightIndex) =>
+      this.#items[leftIndex].area - this.#items[rightIndex].area ||
+      this.#items[leftIndex].node.id.localeCompare(this.#items[rightIndex].node.id);
+    for (const cell of this.#grid) cell.sort(byAreaThenId);
+    this.#wideItems.sort(byAreaThenId);
+
     buildWork.wideItems = this.#wideItems.length;
     this.#buildObservations = Object.freeze({
       ...buildWork,
@@ -168,7 +178,20 @@ export class CityPickingIndex {
       candidateBoundsEvaluations: 0,
       projectionCalls: 0,
       fullSceneNodeVisits: 0,
+      directHit: false,
     };
+    const direct = this.#pickContainingPoint(
+      center,
+      normalizedView,
+      normalizedPointer,
+      kindForEntity,
+      work,
+    );
+    if (direct) {
+      work.directHit = true;
+      return { node: direct.node, observations: work };
+    }
+
     const candidates = this.#query(query, work);
     let best = null;
     for (const itemIndex of candidates) {
@@ -230,6 +253,70 @@ export class CityPickingIndex {
         : { minX: bounds.minX, maxX: bounds.maxX, minY: bounds.minY, maxY: bounds.maxY };
     }
     return { bounds: combined, observations: work };
+  }
+
+  #pickContainingPoint(center, view, pointer, kindForEntity, work) {
+    if (!this.#sceneBounds || !pointInsideBounds(center, this.#sceneBounds)) return null;
+    const range = this.#cellRange({
+      minX: center.x,
+      maxX: center.x,
+      minY: center.y,
+      maxY: center.y,
+    });
+    const cellItems = this.#grid[range.minY * this.#gridSize + range.minX];
+    let cellOffset = 0;
+    let wideOffset = 0;
+    let best = null;
+    let bestArea = Infinity;
+
+    while (cellOffset < cellItems.length || wideOffset < this.#wideItems.length) {
+      const cellIndex = cellItems[cellOffset];
+      const wideIndex = this.#wideItems[wideOffset];
+      let itemIndex;
+      if (wideIndex === undefined) {
+        itemIndex = cellIndex;
+        cellOffset++;
+      } else if (cellIndex === undefined) {
+        itemIndex = wideIndex;
+        wideOffset++;
+      } else {
+        const cellItem = this.#items[cellIndex];
+        const wideItem = this.#items[wideIndex];
+        if (
+          cellItem.area < wideItem.area ||
+          (
+            cellItem.area === wideItem.area &&
+            cellItem.node.id.localeCompare(wideItem.node.id) <= 0
+          )
+        ) {
+          itemIndex = cellIndex;
+          cellOffset++;
+        } else {
+          itemIndex = wideIndex;
+          wideOffset++;
+        }
+      }
+
+      const item = this.#items[itemIndex];
+      if (item.area > bestArea) break;
+      work.candidateIndexVisits++;
+      if (!pointInsideBounds(center, item)) continue;
+
+      const bounds = screenBoundsFromOverview(item, view, pointer.width, pointer.height);
+      work.candidateBoundsEvaluations++;
+      const candidate = scoredCandidate(
+        item.node,
+        item.entityId,
+        kindForEntity,
+        pointer,
+        bounds,
+      );
+      if (!best || compareCandidates(candidate, best) < 0) {
+        best = candidate;
+        bestArea = item.area;
+      }
+    }
+    return best;
   }
 
   #query(query, work) {
@@ -561,6 +648,15 @@ function requireViewport(width, height) {
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     throw new Error("picking viewport must be finite and positive");
   }
+}
+
+function pointInsideBounds(point, bounds) {
+  return (
+    point.x >= bounds.minX &&
+    point.x <= bounds.maxX &&
+    point.y >= bounds.minY &&
+    point.y <= bounds.maxY
+  );
 }
 
 function rectanglesOverlap(left, right) {
