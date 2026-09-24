@@ -48,3 +48,6 @@ printf '{"scenario":"render-frame-demo","elapsedNs":%s,"frameBytes":%s,"determin
 # Timings remain advisory. Deterministic unit tests enforce the blocking work-count ratchets:
 # one clock write per non-zero batch and zero immutable-building visits during advancement.
 cargo bench --locked --quiet -p city-game-core --bench fixed_step -- --smoke
+
+# Render preparation benchmark records timing plus allocation work for the materializing baseline.
+cargo bench --locked --quiet -p city-game-core --bench render_frame -- --smoke
