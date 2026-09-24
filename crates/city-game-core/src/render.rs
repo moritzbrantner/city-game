@@ -288,16 +288,16 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let mut fit_points = Vec::new();
     let planning = &save.world.planning;
 
-    for road in save.effective_roads() {
+    planning.visit_effective_roads(&save.scenario, |road| {
         append_road_nodes(
-            &road.id,
-            &road.geometry,
+            road.id,
+            road.geometry,
             road.class,
             projection,
             &mut nodes,
             &mut fit_points,
         );
-    }
+    });
     for building in &save.scenario.buildings {
         if planning.is_suppressed(&building.id) {
             continue;
