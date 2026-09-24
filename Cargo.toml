@@ -14,7 +14,7 @@ repository = "https://github.com/moritzbrantner/city-game"
 
 [workspace.dependencies]
 geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "c4df63a023f2183d700a9a28071d732d345e7c25" }
-geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "c4df63a023f2183d700a9a28071d732d345e7c25" }
+geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "5c22087182bb26e0b84194bb70398313547c2cde" }
 protobuf = "=2.28.0"
 osmpbfreader = "=0.16.1"
 serde = { version = "=1.0.229", features = ["derive"] }

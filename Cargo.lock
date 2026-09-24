@@ -93,7 +93,7 @@ dependencies = [
 name = "city-game-core"
 version = "0.1.0"
 dependencies = [
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25)",
  "moenarch-geo-io-osm",
  "osmpbfreader",
  "protobuf",
@@ -365,6 +365,16 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-core"
 version = "0.1.0"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=5c22087182bb26e0b84194bb70398313547c2cde#5c22087182bb26e0b84194bb70398313547c2cde"
+dependencies = [
+ "moritzbrantner-runtime-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "moenarch-geo-core"
+version = "0.1.0"
 source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
 dependencies = [
  "moritzbrantner-runtime-core",
@@ -375,10 +385,10 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-geojson"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=5c22087182bb26e0b84194bb70398313547c2cde#5c22087182bb26e0b84194bb70398313547c2cde"
 dependencies = [
  "geojson",
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=5c22087182bb26e0b84194bb70398313547c2cde)",
  "moritzbrantner-runtime-core",
  "serde",
  "serde_json",
@@ -387,10 +397,10 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-osm"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=5c22087182bb26e0b84194bb70398313547c2cde#5c22087182bb26e0b84194bb70398313547c2cde"
 dependencies = [
  "base64",
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=5c22087182bb26e0b84194bb70398313547c2cde)",
  "moenarch-geo-io-geojson",
  "moritzbrantner-runtime-core",
  "osmpbfreader",
