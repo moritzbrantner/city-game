@@ -3,13 +3,14 @@
   "suite": "city-game/picking-index-v1",
   "stressNodes": 21451,
   "stressQueries": 256,
-  "maxCandidateBoundsEvaluationsPerPick": 256,
-  "maxCandidateProjectionCallsPerPick": 2048,
+  "maxCandidateBoundsEvaluationsPerPick": 2048,
+  "maxCandidateProjectionCallsPerPick": 0,
   "maxFullSceneFallbackNodeVisits": 0,
   "buildNodeVisitsPerSceneNode": 1,
   "buildProjectionCallsPerIndexedBox": 8,
   "timing": {
     "blocking": false
   },
-  "policy": "Structural work is blocking; shared-runner timings are advisory. The index may visit every scene node once when scene identity changes, but retained camera/picking queries must not fall back to full-scene scans on the supported city camera contract. Budget changes require explicit reviewed evidence and must not be regenerated from the candidate merely to make it green."
+  "policy": "Structural work is blocking; shared-runner timings are advisory. The index may visit every scene node once when scene identity changes. Supported picks must reuse those validated projected bounds, perform zero point projections and zero full-scene fallback visits, and exact candidate evaluation must stay below both the absolute and relative city-density ceilings. These initial ceilings are calibrated against checked-in real-city fixtures; changes require explicit reviewed evidence and must not be regenerated from a candidate merely to make it green.",
+  "maxCandidateFractionPerPick": 0.1
 }
