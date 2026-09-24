@@ -729,7 +729,7 @@ fn projected_bounds(
     geometry: &Geometry,
     projection: GameWorldProjection,
 ) -> Option<ProjectedBounds> {
-    let mut bounds = None;
+    let mut bounds: Option<ProjectedBounds> = None;
     visit_positions(geometry, &mut |position| {
         let projected = projection.project(position);
         match &mut bounds {
