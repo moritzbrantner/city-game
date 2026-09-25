@@ -89,7 +89,7 @@ pub(crate) fn render_frame_with_view_json(save_json: &str, view_json: &str, aspe
 pub(crate) fn prepare_render_json(save_json: &str, aspect: f32) -> String {
     encode_result((|| {
         let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
-        Ok(prepare_live_render_value(&save, aspect)?)
+        prepare_live_render_value(&save, aspect)
     })())
 }
 
