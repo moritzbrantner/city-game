@@ -14,6 +14,7 @@ WebAssembly.instantiate = async function (...args) {
     exports[name] = (...args) => {
       evidence.calls[name] = (evidence.calls[name] ?? 0) + 1;
       const packed = value(...args);
+      if (packed === undefined) return packed;
       const unsigned = BigInt.asUintN(64, packed);
       const response = JSON.parse(new TextDecoder().decode(new Uint8Array(exports.memory.buffer,
         Number(unsigned & 0xffffffffn), Number(unsigned >> 32n))));
