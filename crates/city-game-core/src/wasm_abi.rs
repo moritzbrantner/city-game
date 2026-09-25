@@ -3,9 +3,11 @@ use std::str;
 use serde_json::json;
 
 use crate::browser_transport::{
-    execute_json, new_save_json, prepare_render_json, query_json, render_camera_json,
-    render_frame_json, render_frame_with_view_json,
+    execute_json, execute_live_json, new_save_json, prepare_live_render_json, prepare_render_json,
+    query_json, query_live_json, render_camera_json, render_frame_json, render_frame_with_view_json,
+    save_from_scenario_json,
 };
+use crate::CitySave;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_alloc(len: u32) -> u32 {
@@ -34,6 +36,69 @@ pub extern "C" fn city_game_free(ptr: u32, len: u32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_new_save(scenario_ptr: u32, scenario_len: u32) -> u64 {
     respond_with_one(scenario_ptr, scenario_len, new_save_json)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_session_create(scenario_ptr: u32, scenario_len: u32) -> u64 {
+    let response = match read_input(scenario_ptr, scenario_len)
+        .and_then(|scenario| save_from_scenario_json(&scenario))
+    {
+        Ok(save) => {
+            let handle = Box::into_raw(Box::new(save)) as *mut CitySave as u32;
+            serde_json::to_string(&json!({ "ok": true, "handle": handle }))
+                .expect("session handle response is serializable")
+        }
+        Err(error) => error_response(&error),
+    };
+    write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_session_destroy(handle: u32) {
+    if handle == 0 {
+        return;
+    }
+
+    // SAFETY: the browser wrapper receives this exact pointer from
+    // `city_game_session_create`, owns it exclusively, and destroys it at most once.
+    unsafe {
+        drop(Box::from_raw(handle as *mut CitySave));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_session_execute(
+    handle: u32,
+    command_ptr: u32,
+    command_len: u32,
+) -> u64 {
+    let response = match (live_save_mut(handle), read_input(command_ptr, command_len)) {
+        (Ok(save), Ok(command)) => execute_live_json(save, &command),
+        (Err(error), _) | (_, Err(error)) => error_response(&error),
+    };
+    write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_session_query(
+    handle: u32,
+    query_ptr: u32,
+    query_len: u32,
+) -> u64 {
+    let response = match (live_save(handle), read_input(query_ptr, query_len)) {
+        (Ok(save), Ok(query)) => query_live_json(save, &query),
+        (Err(error), _) | (_, Err(error)) => error_response(&error),
+    };
+    write_output(response)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn city_game_session_prepare_render(handle: u32, aspect: f32) -> u64 {
+    let response = match live_save(handle) {
+        Ok(save) => prepare_live_render_json(save, aspect),
+        Err(error) => error_response(&error),
+    };
+    write_output(response)
 }
 
 #[unsafe(no_mangle)]
@@ -106,6 +171,26 @@ pub extern "C" fn city_game_render_frame_view(
         (Err(error), _) | (_, Err(error)) => error_response(&error),
     };
     write_output(response)
+}
+
+fn live_save(handle: u32) -> Result<&'static CitySave, String> {
+    if handle == 0 {
+        return Err("city-game session handle must be non-zero".to_owned());
+    }
+
+    // SAFETY: session handles are private to the synchronous browser wrapper. The wrapper owns
+    // each handle exclusively from create through destroy and rejects use after disposal.
+    Ok(unsafe { &*(handle as *const CitySave) })
+}
+
+fn live_save_mut(handle: u32) -> Result<&'static mut CitySave, String> {
+    if handle == 0 {
+        return Err("city-game session handle must be non-zero".to_owned());
+    }
+
+    // SAFETY: the wrapper never aliases mutable session operations. WASM calls are synchronous,
+    // and one JS CityGameSession owns each handle until deterministic destruction.
+    Ok(unsafe { &mut *(handle as *mut CitySave) })
 }
 
 fn respond_with_one(ptr: u32, len: u32, handler: fn(&str) -> String) -> u64 {
