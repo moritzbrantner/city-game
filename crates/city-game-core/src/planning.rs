@@ -1,10 +1,80 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
+
+#[cfg(test)]
+use std::cell::Cell;
 
 use geo_core::Geometry;
 use serde::{Deserialize, Deserializer, Serialize, de::Error as _};
 
 use crate::{CitySave, CityScenario, CityWorld, PopulationError, RoadClass};
+
+#[cfg(test)]
+std::thread_local! {
+    static VALIDATION_SCENARIO_ENTITY_VISITS: Cell<u64> = const { Cell::new(0) };
+    static VALIDATION_MEMBERSHIP_LOOKUPS: Cell<u64> = const { Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_planning_validation_work() {
+    VALIDATION_SCENARIO_ENTITY_VISITS.with(|visits| visits.set(0));
+    VALIDATION_MEMBERSHIP_LOOKUPS.with(|lookups| lookups.set(0));
+}
+
+#[cfg(test)]
+pub(crate) fn planning_validation_work() -> (u64, u64) {
+    (
+        VALIDATION_SCENARIO_ENTITY_VISITS.with(Cell::get),
+        VALIDATION_MEMBERSHIP_LOOKUPS.with(Cell::get),
+    )
+}
+
+struct ScenarioEntityMembership<'a> {
+    ids: HashSet<&'a str>,
+}
+
+impl<'a> ScenarioEntityMembership<'a> {
+    fn new(scenario: &'a CityScenario) -> Self {
+        let capacity = scenario.roads.len()
+            + scenario.buildings.len()
+            + scenario.water.len()
+            + scenario.land_use_areas.len()
+            + scenario.transit_anchors.len();
+        let mut ids = HashSet::with_capacity(capacity);
+
+        for id in scenario
+            .roads
+            .iter()
+            .map(|entity| entity.id.as_str())
+            .chain(scenario.buildings.iter().map(|entity| entity.id.as_str()))
+            .chain(scenario.water.iter().map(|entity| entity.id.as_str()))
+            .chain(
+                scenario
+                    .land_use_areas
+                    .iter()
+                    .map(|entity| entity.id.as_str()),
+            )
+            .chain(
+                scenario
+                    .transit_anchors
+                    .iter()
+                    .map(|entity| entity.id.as_str()),
+            )
+        {
+            #[cfg(test)]
+            VALIDATION_SCENARIO_ENTITY_VISITS.with(|visits| visits.set(visits.get() + 1));
+            ids.insert(id);
+        }
+
+        Self { ids }
+    }
+
+    fn contains(&self, id: &str) -> bool {
+        #[cfg(test)]
+        VALIDATION_MEMBERSHIP_LOOKUPS.with(|lookups| lookups.set(lookups.get() + 1));
+        self.ids.contains(id)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -250,14 +320,15 @@ impl CityPlanningOverlay {
         scenario: &CityScenario,
     ) -> Result<(), PlanningError> {
         self.validate_loaded()?;
+        let membership = ScenarioEntityMembership::new(scenario);
 
         for id in self.player_roads.keys().chain(self.zones.keys()) {
-            if scenario.contains_entity(id) {
+            if membership.contains(id) {
                 return Err(PlanningError::ScenarioEntityIdReserved(id.clone()));
             }
         }
         for id in &self.suppressed_scenario_entities {
-            if !scenario.contains_entity(id) {
+            if !membership.contains(id) {
                 return Err(PlanningError::UnknownScenarioEntity(id.clone()));
             }
         }
