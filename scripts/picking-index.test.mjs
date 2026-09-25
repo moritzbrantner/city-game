@@ -61,6 +61,19 @@ function gridNodes(count) {
   return nodes;
 }
 
+function assertScreenBoundsEquivalent(actual, expected) {
+  assert.equal(actual === null, expected === null);
+  if (!actual || !expected) return;
+  for (const key of ["minX", "maxX", "minY", "maxY"]) {
+    const scale = Math.max(1, Math.abs(actual[key]), Math.abs(expected[key]));
+    const tolerance = Number.EPSILON * 32 * scale;
+    assert.ok(
+      Math.abs(actual[key] - expected[key]) <= tolerance,
+      `${key} diverged beyond floating-point roundoff: ${actual[key]} vs ${expected[key]}`,
+    );
+  }
+}
+
 function kindForEntity(id) {
   if (id.startsWith("road/")) return "Road";
   if (id.startsWith("building/")) return "Building";
@@ -204,7 +217,7 @@ test("selected-entity bounds project only that entity instead of rescanning the 
 
   const fast = index.screenBoundsForEntity(current, view, "road/selected", 1280, 720);
   const reference = entityScreenBoundsLinear(current, "road/selected", 1280, 720);
-  assert.deepEqual(fast.bounds, reference.bounds);
+  assertScreenBoundsEquivalent(fast.bounds, reference.bounds);
   assert.equal(fast.observations.path, "indexed");
   assert.equal(fast.observations.nodeVisits, 2);
   assert.equal(reference.observations.nodeVisits, nodes.length);
