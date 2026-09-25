@@ -22,12 +22,11 @@ export class CityGameRuntime {
       "memory",
       "city_game_alloc",
       "city_game_free",
-      "city_game_new_save",
-      "city_game_execute",
-      "city_game_query",
-      "city_game_render_frame",
-      "city_game_render_frame_view",
-      "city_game_prepare_render",
+      "city_game_session_create",
+      "city_game_session_destroy",
+      "city_game_session_execute",
+      "city_game_session_query",
+      "city_game_session_prepare_render",
       "city_game_render_camera",
     ];
     for (const name of required) {
@@ -39,17 +38,16 @@ export class CityGameRuntime {
   }
 
   createSession(scenario) {
-    const response = requireSuccess(this.#newSave(scenario));
-    let save = response.save;
+    const created = requireSuccess(this.#createSession(scenario));
+    const handle = requireSessionHandle(created.handle);
     const renderCache = new CityRenderCache(
-      (aspect) => requireSuccess(this.#prepareFrame(save, aspect)),
+      (aspect) => requireSuccess(this.#prepareSession(handle, aspect)),
       (overview, view) => requireSuccess(this.#renderCamera(overview, view)).camera,
     );
 
     return new CityGameSession(
       (command) => {
-        const commandResponse = requireSuccess(this.#execute(save, command));
-        save = commandResponse.save;
+        const commandResponse = requireSuccess(this.#executeSession(handle, command));
         const outcome = commandResponse.outcome;
         // Only the authoritative explicit no-op receipt permits retaining geometry.
         if (outcome?.kind !== "planning" || outcome.outcome !== "unchanged") {
@@ -57,43 +55,35 @@ export class CityGameRuntime {
         }
         return outcome;
       },
-      (query) => requireSuccess(this.#query(save, query)).result,
+      (query) => requireSuccess(this.#querySession(handle, query)).result,
       (aspect, view) => renderCache.renderFrame(aspect, view),
+      () => {
+        renderCache.invalidate();
+        this.#exports.city_game_session_destroy(handle);
+      },
     );
   }
 
-  #newSave(scenario) {
+  #createSession(scenario) {
     return this.#call([scenario], (input) =>
-      this.#exports.city_game_new_save(input.ptr, input.len),
+      this.#exports.city_game_session_create(input.ptr, input.len),
     );
   }
 
-  #execute(save, command) {
-    return this.#call([save, command], (saveInput, commandInput) =>
-      this.#exports.city_game_execute(
-        saveInput.ptr,
-        saveInput.len,
-        commandInput.ptr,
-        commandInput.len,
-      ),
+  #executeSession(handle, command) {
+    return this.#call([command], (input) =>
+      this.#exports.city_game_session_execute(handle, input.ptr, input.len),
     );
   }
 
-  #query(save, query) {
-    return this.#call([save, query], (saveInput, queryInput) =>
-      this.#exports.city_game_query(
-        saveInput.ptr,
-        saveInput.len,
-        queryInput.ptr,
-        queryInput.len,
-      ),
+  #querySession(handle, query) {
+    return this.#call([query], (input) =>
+      this.#exports.city_game_session_query(handle, input.ptr, input.len),
     );
   }
 
-  #prepareFrame(save, aspect) {
-    return this.#call([save], (input) =>
-      this.#exports.city_game_prepare_render(input.ptr, input.len, aspect),
-    );
+  #prepareSession(handle, aspect) {
+    return this.#read(this.#exports.city_game_session_prepare_render(handle, aspect));
   }
 
   #renderCamera(overview, view) {
@@ -151,24 +141,50 @@ class CityGameSession {
   #executeCommand;
   #queryState;
   #render;
+  #disposeSession;
+  #disposed = false;
 
-  constructor(executeCommand, queryState, render) {
+  constructor(executeCommand, queryState, render, disposeSession) {
     this.#executeCommand = executeCommand;
     this.#queryState = queryState;
     this.#render = render;
+    this.#disposeSession = disposeSession;
   }
 
   execute(command) {
+    this.#requireActive();
     return this.#executeCommand(command);
   }
 
   query(query) {
+    this.#requireActive();
     return this.#queryState(query);
   }
 
   renderFrame(aspect, view = OVERVIEW_VIEW) {
+    this.#requireActive();
     return this.#render(aspect, view);
   }
+
+  dispose() {
+    if (this.#disposed) return;
+    this.#disposed = true;
+    this.#disposeSession();
+  }
+
+  #requireActive() {
+    if (this.#disposed) {
+      throw new Error("city-game session has been disposed");
+    }
+  }
+}
+
+function requireSessionHandle(value) {
+  const handle = Number(value);
+  if (!Number.isInteger(handle) || handle <= 0 || handle > 0xffffffff) {
+    throw new Error("city-game WASM returned an invalid session handle");
+  }
+  return handle;
 }
 
 function requireSuccess(response) {
