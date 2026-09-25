@@ -223,44 +223,56 @@ async function selectScenario(scenario, updateUrl = true) {
   }
   const canonicalScenario = await response.json();
   const session = runtime.createSession(canonicalScenario);
-  const nextView = { ...OVERVIEW_VIEW };
-  const frame = validateSessionFrame(
-    null,
-    session.renderFrame(DEFAULT_FRAME_ASPECT, nextView),
-    validateRenderFrame,
-    validateRenderCamera,
-  );
-  if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
-    throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
-  }
-  if (generation !== loadGeneration) return;
+  let accepted = false;
+  try {
+    const nextView = { ...OVERVIEW_VIEW };
+    const frame = validateSessionFrame(
+      null,
+      session.renderFrame(DEFAULT_FRAME_ASPECT, nextView),
+      validateRenderFrame,
+      validateRenderCamera,
+    );
+    if (!Number.isFinite(frame.camera.aspect) || frame.camera.aspect <= 0) {
+      throw new Error(`${scenario.name} frame must declare a finite positive camera aspect`);
+    }
+    if (generation !== loadGeneration) return;
 
-  currentScenario = scenario;
-  currentCanonicalScenario = canonicalScenario;
-  currentSession = session;
-  currentFrame = frame;
-  cameraView = nextView;
-  entityIndex = buildEntityIndex(canonicalScenario);
-  pickingIndex = new CityPickingIndex(frame, nextView);
-  setSelectedEntity(null);
-  updateOverview(canonicalScenario);
-  updateViewControls();
-  canvas.style.aspectRatio = String(frame.camera.aspect);
-  scenarioLabel.textContent = scenario.name;
-  regionLabel.textContent = scenario.region;
-  objectsLabel.textContent = String(frame.nodes.length);
-  dataKindLabel.textContent = scenario.dataKind;
-  descriptionLabel.textContent = scenario.description;
-  cityTitle.textContent = scenario.name;
-  cityRegion.textContent = scenario.region;
-  openScenarioButton.textContent = `Open ${scenario.name}`;
-  openScenarioButton.disabled = false;
-  statusLabel.textContent = "Scenario ready. Open it to inspect the city.";
-  for (const [id, button] of buttons) {
-    button.setAttribute("aria-pressed", String(id === scenario.id));
+    const nextEntityIndex = buildEntityIndex(canonicalScenario);
+    const nextPickingIndex = new CityPickingIndex(frame, nextView);
+    const previousSession = currentSession;
+
+    currentScenario = scenario;
+    currentCanonicalScenario = canonicalScenario;
+    currentSession = session;
+    currentFrame = frame;
+    cameraView = nextView;
+    entityIndex = nextEntityIndex;
+    pickingIndex = nextPickingIndex;
+    accepted = true;
+    previousSession?.dispose();
+
+    setSelectedEntity(null);
+    updateOverview(canonicalScenario);
+    updateViewControls();
+    canvas.style.aspectRatio = String(frame.camera.aspect);
+    scenarioLabel.textContent = scenario.name;
+    regionLabel.textContent = scenario.region;
+    objectsLabel.textContent = String(frame.nodes.length);
+    dataKindLabel.textContent = scenario.dataKind;
+    descriptionLabel.textContent = scenario.description;
+    cityTitle.textContent = scenario.name;
+    cityRegion.textContent = scenario.region;
+    openScenarioButton.textContent = `Open ${scenario.name}`;
+    openScenarioButton.disabled = false;
+    statusLabel.textContent = "Scenario ready. Open it to inspect the city.";
+    for (const [id, button] of buttons) {
+      button.setAttribute("aria-pressed", String(id === scenario.id));
+    }
+    if (updateUrl) updateLocation();
+    render();
+  } finally {
+    if (!accepted) session.dispose();
   }
-  if (updateUrl) updateLocation();
-  render();
 }
 
 function updateOverview(scenario) {
@@ -1048,6 +1060,7 @@ void initializeInputBindings().catch((error) => {
 const observer = new ResizeObserver(render);
 observer.observe(canvas);
 window.addEventListener("pagehide", () => {
+  currentSession?.dispose();
   currentSession = null;
   currentCanonicalScenario = null;
   settingsSession?.dispose();
