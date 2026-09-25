@@ -184,6 +184,32 @@ mod tests {
     }
 
     #[test]
+    fn live_transport_keeps_save_owned_and_returns_only_outcomes_or_projections() {
+        let mut save = CitySave::new(scenario()).unwrap();
+        save.world.tick = 4;
+
+        let command_json = serde_json::to_string(&CityCommand::Restart).unwrap();
+        let command: Value =
+            serde_json::from_str(&execute_live_json(&mut save, &command_json)).unwrap();
+        assert_eq!(command["ok"], true);
+        assert_eq!(command["outcome"]["kind"], "restarted");
+        assert!(command.get("save").is_none());
+        assert_eq!(save.world.tick, 0);
+
+        let query_json = serde_json::to_string(&CityQuery::TimePosition).unwrap();
+        let query: Value = serde_json::from_str(&query_live_json(&save, &query_json)).unwrap();
+        assert_eq!(query["ok"], true);
+        assert_eq!(query["result"]["kind"], "timePosition");
+        assert!(query.get("save").is_none());
+
+        let prepared: Value =
+            serde_json::from_str(&prepare_live_render_json(&save, 1.0)).unwrap();
+        assert_eq!(prepared["ok"], true);
+        assert!(prepared["frame"].is_object());
+        assert!(prepared.get("save").is_none());
+    }
+
+    #[test]
     fn browser_transport_queries_the_same_read_contract() {
         let save = CitySave::new(scenario()).unwrap();
         let save_json = serde_json::to_string(&save).unwrap();
