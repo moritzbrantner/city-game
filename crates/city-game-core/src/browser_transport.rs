@@ -3,8 +3,8 @@ use serde_json::{Value, json};
 
 use crate::render::{PreparedCamera, prepare_save_frame, prepared_camera_view};
 use crate::{
-    CityCommand, CityQuery, CitySave, CityScenario, RenderView, build_save_render_frame,
-    build_save_render_frame_with_view,
+    CityCommand, CityCommandOutcome, CityQuery, CityQueryResult, CitySave, CityScenario,
+    RenderView, build_save_render_frame, build_save_render_frame_with_view,
 };
 
 #[derive(Serialize)]
@@ -14,34 +14,62 @@ struct ErrorEnvelope<'a> {
     error: &'a str,
 }
 
+pub(crate) fn save_from_scenario_json(scenario_json: &str) -> Result<CitySave, String> {
+    let scenario: CityScenario =
+        serde_json::from_str(scenario_json).map_err(|error| error.to_string())?;
+    CitySave::new(scenario).map_err(|error| error.to_string())
+}
+
+fn execute_outcome(
+    save: &mut CitySave,
+    command_json: &str,
+) -> Result<CityCommandOutcome, String> {
+    let command: CityCommand =
+        serde_json::from_str(command_json).map_err(|error| error.to_string())?;
+    save.execute(command).map_err(|error| error.to_string())
+}
+
+fn query_result(save: &CitySave, query_json: &str) -> Result<CityQueryResult, String> {
+    let query: CityQuery =
+        serde_json::from_str(query_json).map_err(|error| error.to_string())?;
+    save.query(query).map_err(|error| error.to_string())
+}
+
 pub(crate) fn new_save_json(scenario_json: &str) -> String {
-    encode_result((|| {
-        let scenario: CityScenario =
-            serde_json::from_str(scenario_json).map_err(|error| error.to_string())?;
-        let save = CitySave::new(scenario).map_err(|error| error.to_string())?;
-        Ok(json!({ "ok": true, "save": save }))
-    })())
+    encode_result(
+        save_from_scenario_json(scenario_json)
+            .map(|save| json!({ "ok": true, "save": save })),
+    )
 }
 
 pub(crate) fn execute_json(save_json: &str, command_json: &str) -> String {
     encode_result((|| {
         let mut save: CitySave =
             serde_json::from_str(save_json).map_err(|error| error.to_string())?;
-        let command: CityCommand =
-            serde_json::from_str(command_json).map_err(|error| error.to_string())?;
-        let outcome = save.execute(command).map_err(|error| error.to_string())?;
+        let outcome = execute_outcome(&mut save, command_json)?;
         Ok(json!({ "ok": true, "save": save, "outcome": outcome }))
     })())
+}
+
+pub(crate) fn execute_live_json(save: &mut CitySave, command_json: &str) -> String {
+    encode_result(
+        execute_outcome(save, command_json)
+            .map(|outcome| json!({ "ok": true, "outcome": outcome })),
+    )
 }
 
 pub(crate) fn query_json(save_json: &str, query_json: &str) -> String {
     encode_result((|| {
         let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
-        let query: CityQuery =
-            serde_json::from_str(query_json).map_err(|error| error.to_string())?;
-        let result = save.query(query).map_err(|error| error.to_string())?;
+        let result = query_result(&save, query_json)?;
         Ok(json!({ "ok": true, "result": result }))
     })())
+}
+
+pub(crate) fn query_live_json(save: &CitySave, query_json: &str) -> String {
+    encode_result(
+        query_result(save, query_json).map(|result| json!({ "ok": true, "result": result })),
+    )
 }
 
 pub(crate) fn render_frame_json(save_json: &str, aspect: f32) -> String {
@@ -66,9 +94,17 @@ pub(crate) fn render_frame_with_view_json(save_json: &str, view_json: &str, aspe
 pub(crate) fn prepare_render_json(save_json: &str, aspect: f32) -> String {
     encode_result((|| {
         let save: CitySave = serde_json::from_str(save_json).map_err(|error| error.to_string())?;
-        let prepared = prepare_save_frame(&save, aspect).map_err(|error| error.to_string())?;
-        Ok(json!({ "ok": true, "frame": prepared.frame, "overview": prepared.overview }))
+        Ok(prepare_live_render_value(&save, aspect)?)
     })())
+}
+
+pub(crate) fn prepare_live_render_json(save: &CitySave, aspect: f32) -> String {
+    encode_result(prepare_live_render_value(save, aspect))
+}
+
+fn prepare_live_render_value(save: &CitySave, aspect: f32) -> Result<Value, String> {
+    let prepared = prepare_save_frame(save, aspect).map_err(|error| error.to_string())?;
+    Ok(json!({ "ok": true, "frame": prepared.frame, "overview": prepared.overview }))
 }
 
 pub(crate) fn render_camera_json(overview_json: &str, view_json: &str) -> String {
