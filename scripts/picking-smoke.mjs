@@ -36,6 +36,19 @@ const pointers = [
 ];
 const records = [];
 
+function assertScreenBoundsEquivalent(actual, expected) {
+  assert.equal(actual === null, expected === null);
+  if (!actual || !expected) return;
+  for (const key of ["minX", "maxX", "minY", "maxY"]) {
+    const scale = Math.max(1, Math.abs(actual[key]), Math.abs(expected[key]));
+    const tolerance = Number.EPSILON * 32 * scale;
+    assert.ok(
+      Math.abs(actual[key] - expected[key]) <= tolerance,
+      `${key} diverged beyond floating-point roundoff: ${actual[key]} vs ${expected[key]}`,
+    );
+  }
+}
+
 function entityKinds(scenario) {
   const kinds = new Map();
   for (const entity of scenario.roads ?? []) kinds.set(entity.id, "Road");
@@ -121,7 +134,7 @@ for (const entry of manifest.scenarios) {
     const frame = session.renderFrame(aspect, view);
     const fastBounds = index.screenBoundsForEntity(frame, view, focusEntity, 1280, 720);
     const referenceBounds = entityScreenBoundsLinear(frame, focusEntity, 1280, 720);
-    assert.deepEqual(fastBounds.bounds, referenceBounds.bounds);
+    assertScreenBoundsEquivalent(fastBounds.bounds, referenceBounds.bounds);
     assert.ok(
       fastBounds.observations.nodeVisits < referenceBounds.observations.nodeVisits ||
         frame.nodes.length <= fastBounds.observations.nodeVisits,
