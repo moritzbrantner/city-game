@@ -124,6 +124,8 @@ try {
   const originalCamera = await evaluate("__cityEvidence.camera");
   const originalProjection = await evaluate("__cityEvidence.projection");
   assert.ok(Array.isArray(originalProjection) && originalProjection.length === 16, "GPU projection was not observed");
+  assert.equal(initial.city_game_session_create, 1);
+  assert.equal(initial.city_game_session_destroy ?? 0, 0);
   assert.equal(initial.city_game_session_prepare_render, 1);
   assert.ok(initial.uploads > 0, "the real WebGL renderer did not upload geometry");
   const click = async (selector) => { await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`); await settle(); };
@@ -227,7 +229,10 @@ try {
   await click("#open-scenario");
   assert.equal(await evaluate("document.querySelector('#selection-name').textContent"), "Nothing");
   assert.equal(await evaluate("document.querySelector('#view-zoom').value"), "1.00×");
-  assert.equal((await stats()).city_game_session_prepare_render, 2, "scenario switch did not prepare exactly one fresh scene");
+  const afterScenarioSwitch = await stats();
+  assert.equal(afterScenarioSwitch.city_game_session_prepare_render, 2, "scenario switch did not prepare exactly one fresh scene");
+  assert.equal(afterScenarioSwitch.city_game_session_create, 2, "scenario switch did not create one replacement Rust save");
+  assert.equal(afterScenarioSwitch.city_game_session_destroy, 1, "scenario switch did not release the previous Rust save");
   await checkMenuLayout();
   checks.push("resize/no-preparation", "scenario-switch/resets-selection-and-camera", "long-city-name/no-horizontal-menu-overflow");
   assert.deepEqual(exceptions, [], "uncaught browser exceptions");
