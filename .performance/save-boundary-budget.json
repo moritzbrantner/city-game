@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "suite": "city-game/retained-save-boundary-v1",
+  "maxOperationInputBytes": 128,
+  "maxOperationOutputBytes": 256,
+  "maxTotalOperationInputBytes": 256,
+  "comparisonScenarios": {
+    "smallRoads": 1,
+    "largeRoads": 4096
+  },
+  "timing": {
+    "blocking": false
+  },
+  "policy": "After scenario/session creation, the named no-op planning command and time-position query must carry only their own JSON payloads. Request and command/query response bytes must not scale with CitySave size. Render preparation receives the opaque session handle and aspect directly, so no serialized save input is permitted. These are structural byte ceilings; shared-runner timing remains advisory."
+}
