@@ -1,10 +1,10 @@
 import {
   createThreeSceneRenderer,
-  projectWorldPoint,
   validateRenderCamera,
   validateRenderFrame,
 } from "@moritzbrantner/three-d-renderer";
 import { CityFramePresenter, entityIdForNode, validateSessionFrame } from "./frame-presenter.js";
+import { CityPickingIndex } from "./picking-index.js";
 import { createCityGameRuntime } from "./wasm.js";
 
 const DEFAULT_FRAME_ASPECT = 16 / 9;
@@ -17,8 +17,6 @@ const KEYBOARD_PAN_STEP = 0.08;
 const DRAG_THRESHOLD_PX = 4;
 const CLICK_TOLERANCE_MOUSE_PX = 10;
 const CLICK_TOLERANCE_TOUCH_PX = 16;
-const PICK_SLOP_MOUSE_PX = 16;
-const PICK_SLOP_TOUCH_PX = 24;
 const OVERVIEW_VIEW = Object.freeze({ panX: 0, panY: 0, zoom: 1 });
 
 const APPEARANCE_DEFINITIONS = [
@@ -148,6 +146,7 @@ let currentSession = null;
 let currentScenario = null;
 let currentCanonicalScenario = null;
 let entityIndex = new Map();
+let pickingIndex = null;
 let selectedEntity = null;
 let cameraView = { ...OVERVIEW_VIEW };
 let loadGeneration = 0;
@@ -242,6 +241,7 @@ async function selectScenario(scenario, updateUrl = true) {
   currentFrame = frame;
   cameraView = nextView;
   entityIndex = buildEntityIndex(canonicalScenario);
+  pickingIndex = new CityPickingIndex(frame, nextView);
   setSelectedEntity(null);
   updateOverview(canonicalScenario);
   updateViewControls();
@@ -406,8 +406,9 @@ function formatNumber(value) {
 
 function refreshFrame() {
   if (!currentSession) return;
+  const previousFrame = currentFrame;
   const frame = validateSessionFrame(
-    currentFrame,
+    previousFrame,
     currentSession.renderFrame(DEFAULT_FRAME_ASPECT, cameraView),
     validateRenderFrame,
     validateRenderCamera,
@@ -416,6 +417,9 @@ function refreshFrame() {
     throw new Error("inspection frame must declare a finite positive camera aspect");
   }
   currentFrame = frame;
+  if (!pickingIndex || frame.nodes !== previousFrame?.nodes) {
+    pickingIndex = new CityPickingIndex(frame, cameraView);
+  }
   updateViewControls();
   render();
 }
@@ -483,22 +487,24 @@ function focusSelection() {
 }
 
 function selectedScreenBounds(width, height) {
-  const matches = currentFrame.nodes.filter((node) => entityIdForNode(node.id) === selectedEntity.id);
-  const bounds = matches
-    .map((node) => projectNodeBounds(currentFrame.camera, node, width, height))
-    .filter(Boolean);
-  if (bounds.length === 0) return null;
-  return {
-    minX: Math.min(...bounds.map((entry) => entry.minX)),
-    maxX: Math.max(...bounds.map((entry) => entry.maxX)),
-    minY: Math.min(...bounds.map((entry) => entry.minY)),
-    maxY: Math.max(...bounds.map((entry) => entry.maxY)),
-  };
+  if (!pickingIndex || !selectedEntity) return null;
+  return pickingIndex.screenBoundsForEntity(
+    currentFrame,
+    cameraView,
+    selectedEntity.id,
+    width,
+    height,
+  ).bounds;
 }
 
 function pickAtPointer(pointer) {
-  if (appMode !== "city" || !currentFrame || !pointer) return;
-  const node = pickNode(currentFrame, pointer);
+  if (appMode !== "city" || !currentFrame || !pointer || !pickingIndex) return;
+  const { node } = pickingIndex.pick(
+    currentFrame,
+    cameraView,
+    pointer,
+    (entityId) => entityIndex.get(entityId)?.kind,
+  );
   if (!node) {
     setSelectedEntity(null);
     statusLabel.textContent = "Selection cleared.";
@@ -508,124 +514,6 @@ function pickAtPointer(pointer) {
   const selection = entityIndex.get(entityId) ?? { id: entityId, kind: "Object", entity: {} };
   setSelectedEntity(selection);
   statusLabel.textContent = `Inspecting ${entityDisplayName(selection)}.`;
-}
-
-function pickNode(frame, pointer) {
-  const candidates = [];
-  const slop = pointer.pointerType === "touch" ? PICK_SLOP_TOUCH_PX : PICK_SLOP_MOUSE_PX;
-  for (const node of frame.nodes) {
-    const bounds = projectNodeBounds(frame.camera, node, pointer.width, pointer.height);
-    if (!bounds) continue;
-    if (
-      pointer.x < bounds.minX - slop ||
-      pointer.x > bounds.maxX + slop ||
-      pointer.y < bounds.minY - slop ||
-      pointer.y > bounds.maxY + slop
-    ) {
-      continue;
-    }
-    const centerX = (bounds.minX + bounds.maxX) * 0.5;
-    const centerY = (bounds.minY + bounds.maxY) * 0.5;
-    const dx = Math.max(bounds.minX - pointer.x, 0, pointer.x - bounds.maxX);
-    const dy = Math.max(bounds.minY - pointer.y, 0, pointer.y - bounds.maxY);
-    const entityId = entityIdForNode(node.id);
-    const kind = entityIndex.get(entityId)?.kind;
-    candidates.push({
-      node,
-      hitDistanceSquared: dx * dx + dy * dy,
-      centerDistanceSquared: (pointer.x - centerX) ** 2 + (pointer.y - centerY) ** 2,
-      area: Math.max(1, (bounds.maxX - bounds.minX) * (bounds.maxY - bounds.minY)),
-      kindPriority: pickKindPriority(kind),
-      depth: bounds.depth,
-    });
-  }
-  candidates.sort(
-    (left, right) =>
-      left.hitDistanceSquared - right.hitDistanceSquared ||
-      left.area - right.area ||
-      left.kindPriority - right.kindPriority ||
-      left.centerDistanceSquared - right.centerDistanceSquared ||
-      left.depth - right.depth ||
-      left.node.id.localeCompare(right.node.id),
-  );
-  return candidates[0]?.node ?? null;
-}
-
-function pickKindPriority(kind) {
-  switch (kind) {
-    case "Building":
-      return 0;
-    case "Road":
-      return 1;
-    case "Water":
-      return 2;
-    case "Land use":
-      return 3;
-    default:
-      return 4;
-  }
-}
-
-function projectNodeBounds(camera, node, width, height) {
-  if (node.geometry?.kind !== "box") return null;
-  const [sizeX, sizeY, sizeZ] = node.geometry.size;
-  const projected = [];
-  for (const x of [-sizeX * 0.5, sizeX * 0.5]) {
-    for (const y of [-sizeY * 0.5, sizeY * 0.5]) {
-      for (const z of [-sizeZ * 0.5, sizeZ * 0.5]) {
-        const worldPoint = transformNodePoint(node, [x, y, z]);
-        const point = projectWorldPoint(camera, worldPoint, { width, height });
-        if (point.visible) projected.push(point);
-      }
-    }
-  }
-  if (projected.length === 0) return null;
-  return {
-    minX: Math.min(...projected.map((point) => point.x)),
-    maxX: Math.max(...projected.map((point) => point.x)),
-    minY: Math.min(...projected.map((point) => point.y)),
-    maxY: Math.max(...projected.map((point) => point.y)),
-    depth: Math.min(...projected.map((point) => point.depth)),
-  };
-}
-
-function transformNodePoint(node, point) {
-  if (Array.isArray(node.modelMatrix)) return transformMatrixPoint(node.modelMatrix, point);
-  const transform = node.transform;
-  const scale = transform.scale ?? [1, 1, 1];
-  const scaled = point.map((value, index) => value * scale[index]);
-  const rotated = rotateQuaternion(
-    scaled,
-    normalizeQuaternion(transform.rotationQuaternion ?? [0, 0, 0, 1]),
-  );
-  return rotated.map((value, index) => value + transform.translation[index]);
-}
-
-function transformMatrixPoint(matrix, [x, y, z]) {
-  const worldX = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12];
-  const worldY = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13];
-  const worldZ = matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14];
-  const worldW = matrix[3] * x + matrix[7] * y + matrix[11] * z + matrix[15];
-  if (!Number.isFinite(worldW) || Math.abs(worldW) <= Number.EPSILON) return [worldX, worldY, worldZ];
-  return [worldX / worldW, worldY / worldW, worldZ / worldW];
-}
-
-function normalizeQuaternion(quaternion) {
-  const length = Math.hypot(...quaternion);
-  if (!Number.isFinite(length) || length <= Number.EPSILON) return [0, 0, 0, 1];
-  return quaternion.map((value) => value / length);
-}
-
-function rotateQuaternion([x, y, z], [qx, qy, qz, qw]) {
-  const ix = qw * x + qy * z - qz * y;
-  const iy = qw * y + qz * x - qx * z;
-  const iz = qw * z + qx * y - qy * x;
-  const iw = -qx * x - qy * y - qz * z;
-  return [
-    ix * qw + iw * -qx + iy * -qz - iz * -qy,
-    iy * qw + iw * -qy + iz * -qx - ix * -qz,
-    iz * qw + iw * -qz + ix * -qy - iy * -qx,
-  ];
 }
 
 function clamp(value, minimum, maximum) {
