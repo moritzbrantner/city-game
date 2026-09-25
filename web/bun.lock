@@ -10,7 +10,7 @@
     },
   },
   "packages": {
-    "@moritzbrantner/three-d-renderer": ["@moritzbrantner/three-d-renderer@github:moritzbrantner/3d-lab#f2acf53", { "dependencies": { "three": "0.185.1" } }, "moritzbrantner-3d-lab-f2acf53"],
+    "@moritzbrantner/three-d-renderer": ["@moritzbrantner/three-d-renderer@github:moritzbrantner/3d-lab#f2acf53", { "dependencies": { "three": "0.185.1" } }, "moritzbrantner-3d-lab-f2acf53", "sha512-MlDUulmJkIg6TsHSmzZCsPwt03zb1xos5LWbmMohqewD7WY/xOPoaQV9yzKKDSpyZ9IakN17CTjkXrYAhfnAuQ=="],
 
     "three": ["three@0.185.1", "", {}, "sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg=="],
   }
