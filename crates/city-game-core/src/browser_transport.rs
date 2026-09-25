@@ -20,25 +20,20 @@ pub(crate) fn save_from_scenario_json(scenario_json: &str) -> Result<CitySave, S
     CitySave::new(scenario).map_err(|error| error.to_string())
 }
 
-fn execute_outcome(
-    save: &mut CitySave,
-    command_json: &str,
-) -> Result<CityCommandOutcome, String> {
+fn execute_outcome(save: &mut CitySave, command_json: &str) -> Result<CityCommandOutcome, String> {
     let command: CityCommand =
         serde_json::from_str(command_json).map_err(|error| error.to_string())?;
     save.execute(command).map_err(|error| error.to_string())
 }
 
 fn query_result(save: &CitySave, query_json: &str) -> Result<CityQueryResult, String> {
-    let query: CityQuery =
-        serde_json::from_str(query_json).map_err(|error| error.to_string())?;
+    let query: CityQuery = serde_json::from_str(query_json).map_err(|error| error.to_string())?;
     save.query(query).map_err(|error| error.to_string())
 }
 
 pub(crate) fn new_save_json(scenario_json: &str) -> String {
     encode_result(
-        save_from_scenario_json(scenario_json)
-            .map(|save| json!({ "ok": true, "save": save })),
+        save_from_scenario_json(scenario_json).map(|save| json!({ "ok": true, "save": save })),
     )
 }
 
