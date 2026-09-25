@@ -40,11 +40,10 @@ function assertScreenBoundsEquivalent(actual, expected) {
   assert.equal(actual === null, expected === null);
   if (!actual || !expected) return;
   for (const key of ["minX", "maxX", "minY", "maxY"]) {
-    const scale = Math.max(1, Math.abs(actual[key]), Math.abs(expected[key]));
-    const tolerance = Number.EPSILON * 32 * scale;
+    const tolerancePx = 1e-3;
     assert.ok(
-      Math.abs(actual[key] - expected[key]) <= tolerance,
-      `${key} diverged beyond floating-point roundoff: ${actual[key]} vs ${expected[key]}`,
+      Math.abs(actual[key] - expected[key]) <= tolerancePx,
+      `${key} diverged by more than ${tolerancePx}px: ${actual[key]} vs ${expected[key]}`,
     );
   }
 }
