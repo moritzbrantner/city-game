@@ -202,8 +202,7 @@ mod tests {
         assert_eq!(query["result"]["kind"], "timePosition");
         assert!(query.get("save").is_none());
 
-        let prepared: Value =
-            serde_json::from_str(&prepare_live_render_json(&save, 1.0)).unwrap();
+        let prepared: Value = serde_json::from_str(&prepare_live_render_json(&save, 1.0)).unwrap();
         assert_eq!(prepared["ok"], true);
         assert!(prepared["frame"].is_object());
         assert!(prepared.get("save").is_none());
