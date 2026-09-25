@@ -668,7 +668,7 @@ mod tests {
                 id.clone(),
                 PlannedRoad {
                     id,
-                    geometry: line(9.0 + index as f64 * 0.000_01),
+                    geometry: line(9.0),
                     class: RoadClass::Residential,
                     name: None,
                 },
@@ -680,7 +680,7 @@ mod tests {
                 id.clone(),
                 PlannedZone {
                     id,
-                    geometry: polygon(10.0 + index as f64 * 0.000_01),
+                    geometry: polygon(10.0),
                     kind: ZoneKind::Residential,
                 },
             );
