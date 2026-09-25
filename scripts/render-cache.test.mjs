@@ -107,8 +107,21 @@ function runtimeHarness() {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const allocations = new Map();
-  const calls = { prepare: 0, camera: 0, full: 0, alloc: 0 };
+  const sessions = new Map();
+  const calls = {
+    prepare: 0,
+    camera: 0,
+    full: 0,
+    alloc: 0,
+    created: 0,
+    destroyed: 0,
+    createInputBytes: 0,
+    commandInputBytes: 0,
+    queryInputBytes: 0,
+    prepareInputBytes: 0,
+  };
   let next = 8;
+  let nextSession = 1;
   let failAllocation = Infinity;
   const allocate = (len) => {
     calls.alloc++;
@@ -125,6 +138,11 @@ function runtimeHarness() {
     new Uint8Array(memory.buffer, ptr, bytes.length).set(bytes);
     return (BigInt(bytes.length) << 32n) | BigInt(ptr);
   };
+  const requireSession = (handle) => {
+    const session = sessions.get(handle);
+    if (!session) throw new Error("invalid fake session handle");
+    return session;
+  };
   const exports = {
     memory,
     city_game_alloc: allocate,
@@ -132,23 +150,38 @@ function runtimeHarness() {
       assert.equal(allocations.get(ptr), len, "free must match a live allocation");
       allocations.delete(ptr);
     },
-    city_game_new_save(ptr, len) {
-      return response({ ok: true, save: { scenario: read(ptr, len), revision: 0 } });
+    city_game_session_create(ptr, len) {
+      calls.created++;
+      calls.createInputBytes += len;
+      const handle = nextSession++;
+      sessions.set(handle, { scenario: read(ptr, len), revision: 0 });
+      return response({ ok: true, handle });
     },
-    city_game_execute(savePtr, saveLen, commandPtr, commandLen) {
-      const save = read(savePtr, saveLen);
+    city_game_session_destroy(handle) {
+      assert.equal(sessions.delete(handle), true, "destroy must own a live session");
+      calls.destroyed++;
+    },
+    city_game_session_execute(handle, commandPtr, commandLen) {
+      calls.commandInputBytes += commandLen;
+      const save = requireSession(handle);
       const command = read(commandPtr, commandLen);
       if (command.kind === "reject") return response({ ok: false, error: "rejected" });
       if (command.kind === "unchanged") {
-        return response({ ok: true, save, outcome: { kind: "planning", outcome: "unchanged" } });
+        return response({ ok: true, outcome: { kind: "planning", outcome: "unchanged" } });
       }
       save.revision++;
-      return response({ ok: true, save, outcome: { kind: command.kind } });
+      return response({ ok: true, outcome: { kind: command.kind } });
     },
-    city_game_query() { return response({ ok: true, result: { kind: "timePosition" } }); },
-    city_game_prepare_render(ptr, len, aspect) {
+    city_game_session_query(handle, queryPtr, queryLen) {
+      calls.queryInputBytes += queryLen;
+      requireSession(handle);
+      read(queryPtr, queryLen);
+      return response({ ok: true, result: { kind: "timePosition" } });
+    },
+    city_game_session_prepare_render(handle, aspect) {
       calls.prepare++;
-      const save = read(ptr, len);
+      calls.prepareInputBytes += 0;
+      const save = requireSession(handle);
       return response({
         ok: true,
         frame: { camera: { aspect }, nodes: [{ revision: save.revision }] },
@@ -159,17 +192,20 @@ function runtimeHarness() {
       calls.camera++;
       return response({ ok: true, camera: { ...read(ptr, len), ...read(viewPtr, viewLen) } });
     },
-    city_game_render_frame() { calls.full++; throw new Error("full composition on hot path"); },
-    city_game_render_frame_view() { calls.full++; throw new Error("full composition on hot path"); },
   };
   return {
-    runtime: new CityGameRuntime(exports), calls, allocations,
-    failNextSecondInput() { failAllocation = calls.alloc + 2; },
+    runtime: new CityGameRuntime(exports),
+    calls,
+    allocations,
+    sessions,
+    failNextSecondInput() {
+      failAllocation = calls.alloc + 2;
+    },
   };
 }
 
 test("successful mutations/restart invalidate, rejected/no-op commands and queries do not", () => {
-  const { runtime, calls, allocations } = runtimeHarness();
+  const { runtime, calls, allocations, sessions } = runtimeHarness();
   const session = runtime.createSession({ name: "test" });
   const first = session.renderFrame(1);
   session.query({ kind: "timePosition" });
@@ -185,10 +221,12 @@ test("successful mutations/restart invalidate, rejected/no-op commands and queri
   }
   assert.deepEqual({ prepare: calls.prepare, full: calls.full }, { prepare: 4, full: 0 });
   assert.equal(allocations.size, 0);
+  session.dispose();
+  assert.equal(sessions.size, 0);
 });
 
-test("session caches are isolated", () => {
-  const { runtime, calls } = runtimeHarness();
+test("session caches and authoritative saves are isolated", () => {
+  const { runtime, calls, sessions } = runtimeHarness();
   const left = runtime.createSession({ name: "left" });
   const right = runtime.createSession({ name: "right" });
   const leftFrame = left.renderFrame(1);
@@ -198,21 +236,60 @@ test("session caches are isolated", () => {
   left.renderFrame(1);
   assert.strictEqual(right.renderFrame(1), rightFrame);
   assert.equal(calls.prepare, 3);
+  left.dispose();
+  assert.equal(sessions.size, 1);
+  right.dispose();
+  assert.equal(sessions.size, 0);
 });
 
-test("partial input allocation failure frees earlier WASM inputs", () => {
+test("partial camera input allocation failure frees earlier WASM inputs", () => {
   const { runtime, allocations, failNextSecondInput } = runtimeHarness();
   const session = runtime.createSession({ name: "test" });
+  const first = session.renderFrame(1);
   failNextSecondInput();
-  assert.throws(() => session.query({ kind: "timePosition" }), /allocate/);
+  assert.throws(() => session.renderFrame(1, moved), /allocate/);
   assert.equal(allocations.size, 0);
+  assert.strictEqual(session.renderFrame(1), first);
+  session.dispose();
 });
 
-test("partial JSON serialization failure frees earlier WASM inputs", () => {
+test("partial JSON serialization failure leaves retained session usable", () => {
   const { runtime, allocations } = runtimeHarness();
   const session = runtime.createSession({ name: "test" });
   const circular = {};
   circular.self = circular;
   assert.throws(() => session.execute(circular), /circular/i);
   assert.equal(allocations.size, 0);
+  assert.deepEqual(session.query({ kind: "timePosition" }), { kind: "timePosition" });
+  session.dispose();
+});
+
+test("post-create state operations do not serialize the retained save", () => {
+  const { runtime, calls } = runtimeHarness();
+  const scenario = { name: "large", payload: "x".repeat(100_000) };
+  const session = runtime.createSession(scenario);
+  const command = { kind: "unchanged" };
+  const query = { kind: "timePosition" };
+
+  session.execute(command);
+  session.query(query);
+  session.renderFrame(1);
+
+  assert.ok(calls.createInputBytes > 100_000);
+  assert.equal(calls.commandInputBytes, new TextEncoder().encode(JSON.stringify(command)).length);
+  assert.equal(calls.queryInputBytes, new TextEncoder().encode(JSON.stringify(query)).length);
+  assert.equal(calls.prepareInputBytes, 0);
+  session.dispose();
+});
+
+test("session disposal is idempotent and rejects later use", () => {
+  const { runtime, calls, sessions } = runtimeHarness();
+  const session = runtime.createSession({ name: "test" });
+  session.dispose();
+  session.dispose();
+  assert.equal(calls.destroyed, 1);
+  assert.equal(sessions.size, 0);
+  assert.throws(() => session.execute({ kind: "planning" }), /disposed/);
+  assert.throws(() => session.query({ kind: "timePosition" }), /disposed/);
+  assert.throws(() => session.renderFrame(1), /disposed/);
 });

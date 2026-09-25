@@ -157,6 +157,7 @@ for (const entry of manifest.scenarios) {
   };
   records.push(record);
   console.log(JSON.stringify(record));
+  session.dispose();
 }
 
 const output = new URL(".artifacts/performance/picking.json", root);

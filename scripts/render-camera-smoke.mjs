@@ -13,7 +13,11 @@ const { instance } = await WebAssembly.instantiate(await readFile(wasmPath), {})
 const wasm = instance.exports;
 const fixture = JSON.parse(await readFile(new URL("fixtures/demo-scenario.json", root)));
 const budget = JSON.parse(await readFile(new URL(".performance/navigation-budget.json", root)));
+const saveBoundaryBudget = JSON.parse(
+  await readFile(new URL(".performance/save-boundary-budget.json", root)),
+);
 assert.equal(budget.schemaVersion, 1);
+assert.equal(saveBoundaryBudget.schemaVersion, 1);
 const aspect = 16 / 9;
 const overview = { panX: 0, panY: 0, zoom: 1 };
 // Keep the PR #41 fixture and view sequence unchanged so retained byte baselines remain comparable.
@@ -68,6 +72,8 @@ function structuralJourney(scenario, limits) {
   assert.deepEqual(observed.snapshot(), (({ frames, ...stats }) => stats)(result), "duplicate view did work");
   assert.strictEqual(session.renderFrame(aspect).camera, first.camera, "overview drifted");
   assert.strictEqual(session.renderFrame(aspect).nodes, first.nodes);
+  session.dispose();
+  assert.equal(observed.snapshot().liveSessions, 0, "structural journey leaked its Rust save");
   return result;
 }
 
@@ -94,8 +100,10 @@ function timings(scenario) {
     else { after = run(true); before = run(false); }
     legacy.push(before); cached.push(after); ratios.push(after / Math.max(before, Number.EPSILON));
   }
-  return { preparationMs, legacy: summarize(legacy), cached: summarize(cached),
+  const result = { preparationMs, legacy: summarize(legacy), cached: summarize(cached),
     cachedOverLegacyMedian: summarize(ratios).medianMs, blocking: false };
+  session.dispose();
+  return result;
 }
 
 for (const [id, limits] of Object.entries(budget.fixtures)) {
@@ -122,6 +130,63 @@ for (const entry of manifest.scenarios) {
   console.log(JSON.stringify(record));
 }
 checkCoverage(realCities, manifest.scenarios.map((entry) => entry.id));
+
+function retainedSaveBoundaryJourney(scenario) {
+  const observed = harness(wasm);
+  const session = observed.runtime.createSession(scenario);
+  observed.reset();
+  const command = {
+    kind: "planning",
+    command: { kind: "removePlayerRoad", id: "player/road/not-present" },
+  };
+  const query = { kind: "timePosition" };
+  const outcome = session.execute(command);
+  const result = session.query(query);
+  session.renderFrame(aspect);
+  const work = observed.snapshot();
+
+  assert.deepEqual(outcome, { kind: "planning", outcome: "unchanged" });
+  assert.equal(result.kind, "timePosition");
+  assert.equal(work.sessionExecuteCalls, 1);
+  assert.equal(work.sessionQueryCalls, 1);
+  assert.equal(work.preparations, 1);
+  assert.equal(work.otherCalls, 0);
+  assert.ok(
+    work.maxSessionOperationInputBytes <= saveBoundaryBudget.maxOperationInputBytes,
+    JSON.stringify(work),
+  );
+  assert.ok(
+    work.maxSessionOperationOutputBytes <= saveBoundaryBudget.maxOperationOutputBytes,
+    JSON.stringify(work),
+  );
+  assert.ok(
+    work.sessionOperationInputBytes <= saveBoundaryBudget.maxTotalOperationInputBytes,
+    JSON.stringify(work),
+  );
+
+  session.dispose();
+  assert.equal(observed.snapshot().liveSessions, 0, "retained-save journey leaked session state");
+  assert.equal(observed.snapshot().liveAllocations, 0, "retained-save journey leaked transport memory");
+  return work;
+}
+
+const saveBoundarySmall = retainedSaveBoundaryJourney(synthetic(1));
+const saveBoundaryLarge = retainedSaveBoundaryJourney(synthetic(4_096));
+assert.equal(
+  saveBoundaryLarge.sessionOperationInputBytes,
+  saveBoundarySmall.sessionOperationInputBytes,
+  "post-create request bytes scaled with CitySave size",
+);
+assert.equal(
+  saveBoundaryLarge.sessionOperationOutputBytes,
+  saveBoundarySmall.sessionOperationOutputBytes,
+  "command/query responses unexpectedly serialized save-sized state",
+);
+assert.equal(
+  saveBoundaryLarge.maxSessionOperationInputBytes,
+  saveBoundarySmall.maxSessionOperationInputBytes,
+);
+checks.push("retained-save-boundary/size-independent-command-query-traffic");
 
 // Every current planning mutation, its authoritative no-op, rejection, query, and restart.
 const observed = harness(wasm);
@@ -236,6 +301,8 @@ const isolated = observed.runtime.createSession(synthetic(64));
 const isolatedFrame = isolated.renderFrame(aspect);
 apply(planning({ kind: "addRoad", road }));
 assert.strictEqual(isolated.renderFrame(aspect), isolatedFrame);
+isolated.dispose();
+assert.equal(observed.snapshot().liveSessions, 1, "isolated session was not released");
 
 // Warm allocator, then stress actual release WASM; leaks cannot hide behind a unit-test fake.
 for (let index = 0; index < 96; index++) session.renderFrame(aspect, views[index % views.length]);
@@ -254,7 +321,32 @@ const emptySession = new CityGameRuntime(wasm).createSession(empty);
 const emptySave = call(wasm, "city_game_new_save", [empty]).save;
 assert.equal(emptySession.renderFrame(aspect).nodes.length, 0);
 for (const view of views) assert.deepEqual(emptySession.renderFrame(aspect, view), reference(emptySave, view));
+emptySession.dispose();
 checks.push("empty-scene");
+
+// Repeated create/destroy must reuse the freed Rust-owned CitySave allocation after warmup.
+const lifecycleRuntime = new CityGameRuntime(wasm);
+for (let index = 0; index < 16; index++) {
+  const disposable = lifecycleRuntime.createSession(fixture);
+  disposable.query({ kind: "timePosition" });
+  disposable.dispose();
+}
+const lifecycleWarmMemoryBytes = wasm.memory.buffer.byteLength;
+for (let index = 0; index < 256; index++) {
+  const disposable = lifecycleRuntime.createSession(fixture);
+  disposable.query({ kind: "timePosition" });
+  disposable.dispose();
+}
+assert.equal(
+  wasm.memory.buffer.byteLength,
+  lifecycleWarmMemoryBytes,
+  "repeated session create/destroy grew WASM linear memory after warmup",
+);
+
+session.dispose();
+assert.equal(observed.snapshot().liveSessions, 0, "primary retained save was not released");
+assert.equal(observed.snapshot().liveAllocations, 0);
+checks.push("256-session-create-destroy/no-memory-growth");
 
 const output = new URL(".artifacts/performance/camera-navigation.json", root);
 await mkdir(new URL(".", output), { recursive: true });
@@ -263,7 +355,8 @@ const report = {
   sourceSha: execFileSync("git", ["rev-parse", "HEAD"], { cwd: fileURLToPath(root), encoding: "utf8" }).trim(),
   baselineSource: budget.baselineSource, runtime: process.version,
   scope: "JS/WASM only; not GPU or browser FPS; timing excludes preparation and is advisory",
-  records, realCities, checks, warmMemoryBytes,
+  records, realCities, checks, warmMemoryBytes, lifecycleWarmMemoryBytes,
+  saveBoundary: { small: saveBoundarySmall, large: saveBoundaryLarge },
 };
 await writeFile(output, JSON.stringify(report, null, 2) + "\n");
 console.log(`Navigation regression contract passed: ${checks.length} checks; ${records.length} synthetic and ${realCities.length} real-city fixtures.`);
