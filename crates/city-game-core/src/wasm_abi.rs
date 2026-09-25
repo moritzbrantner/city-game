@@ -2,12 +2,12 @@ use std::str;
 
 use serde_json::json;
 
+use crate::CitySave;
 use crate::browser_transport::{
     execute_json, execute_live_json, new_save_json, prepare_live_render_json, prepare_render_json,
-    query_json, query_live_json, render_camera_json, render_frame_json, render_frame_with_view_json,
-    save_from_scenario_json,
+    query_json, query_live_json, render_camera_json, render_frame_json,
+    render_frame_with_view_json, save_from_scenario_json,
 };
-use crate::CitySave;
 
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_alloc(len: u32) -> u32 {
@@ -83,11 +83,7 @@ pub extern "C" fn city_game_session_execute(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn city_game_session_query(
-    handle: u32,
-    query_ptr: u32,
-    query_len: u32,
-) -> u64 {
+pub extern "C" fn city_game_session_query(handle: u32, query_ptr: u32, query_len: u32) -> u64 {
     let response = match read_input(query_ptr, query_len) {
         Ok(query) => match with_live_save(handle, |save| query_live_json(save, &query)) {
             Ok(response) => response,
@@ -179,10 +175,7 @@ pub extern "C" fn city_game_render_frame_view(
     write_output(response)
 }
 
-fn with_live_save<T>(
-    handle: u32,
-    use_save: impl FnOnce(&CitySave) -> T,
-) -> Result<T, String> {
+fn with_live_save<T>(handle: u32, use_save: impl FnOnce(&CitySave) -> T) -> Result<T, String> {
     if handle == 0 {
         return Err("city-game session handle must be non-zero".to_owned());
     }
