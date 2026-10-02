@@ -10,6 +10,7 @@ Persisted planning state references the immutable imported scenario in two ways:
 For a scenario with `N` imported entities and `M` persisted planning identifiers, bulk
 save-load validation should perform one `O(N)` pass to prepare membership and `O(M)`
 membership queries. It must not rescan all imported entity arrays for every planning ID.
+When `M` is zero (an untouched planning overlay), validation must not prepare membership at all.
 
 ## Ownership and lifetime
 
@@ -34,6 +35,8 @@ Test-only work counters require exactly:
 
 - 4,096 imported-entity visits to prepare membership; and
 - 2,048 membership lookups for persisted planning references.
+
+A save with an empty planning overlay must record zero imported-entity visits and zero lookups.
 
 The same suite retains failure coverage for reserved imported IDs, unknown suppressed IDs,
 mismatched persisted map keys, and invalid planning geometry.

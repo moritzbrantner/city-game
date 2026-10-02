@@ -320,6 +320,12 @@ impl CityPlanningOverlay {
         scenario: &CityScenario,
     ) -> Result<(), PlanningError> {
         self.validate_loaded()?;
+        if self.player_roads.is_empty()
+            && self.zones.is_empty()
+            && self.suppressed_scenario_entities.is_empty()
+        {
+            return Ok(());
+        }
         let membership = ScenarioEntityMembership::new(scenario);
 
         for id in self.player_roads.keys().chain(self.zones.keys()) {
@@ -698,6 +704,18 @@ mod tests {
                 (SUPPRESSED + PLAYER_ROADS + ZONES) as u64
             )
         );
+    }
+
+    #[test]
+    fn save_load_without_planning_references_skips_scenario_membership() {
+        let save = CitySave::new(scenario()).unwrap();
+
+        let encoded = serde_json::to_string(&save).unwrap();
+        reset_planning_validation_work();
+        let decoded: CitySave = serde_json::from_str(&encoded).unwrap();
+
+        assert_eq!(decoded, save);
+        assert_eq!(planning_validation_work(), (0, 0));
     }
 
     #[test]
