@@ -93,7 +93,7 @@ dependencies = [
 name = "city-game-core"
 version = "0.1.0"
 dependencies = [
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=7b0274eb10339c7f2c3537e76cef9b41bae26f9e)",
  "moenarch-geo-io-osm",
  "osmpbfreader",
  "protobuf",
@@ -380,6 +380,16 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-core"
 version = "0.1.0"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=7b0274eb10339c7f2c3537e76cef9b41bae26f9e#7b0274eb10339c7f2c3537e76cef9b41bae26f9e"
+dependencies = [
+ "moritzbrantner-runtime-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "moenarch-geo-core"
+version = "0.1.0"
 source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
 dependencies = [
  "moritzbrantner-runtime-core",
@@ -393,7 +403,7 @@ version = "0.1.0"
 source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
 dependencies = [
  "geojson",
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25)",
  "moritzbrantner-runtime-core",
  "serde",
  "serde_json",
@@ -405,7 +415,7 @@ version = "0.1.0"
 source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25#c4df63a023f2183d700a9a28071d732d345e7c25"
 dependencies = [
  "base64",
- "moenarch-geo-core",
+ "moenarch-geo-core 0.1.0 (git+https://github.com/moritzbrantner/geo-analysis.git?rev=c4df63a023f2183d700a9a28071d732d345e7c25)",
  "moenarch-geo-io-geojson",
  "moritzbrantner-runtime-core",
  "osmpbfreader",
