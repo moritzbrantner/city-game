@@ -437,7 +437,7 @@ mod tests {
     use std::io::Write;
 
     use osmpbfreader::{fileformat, osmformat};
-    use protobuf::Message;
+    use protobuf::{Message, MessageField};
 
     use super::*;
 
@@ -459,7 +459,7 @@ mod tests {
             "maxspeed",
             "50",
         ] {
-            string_table.mut_s().push(value.as_bytes().to_vec());
+            string_table.s.push(value.as_bytes().to_vec());
         }
 
         let mut dense_nodes = osmformat::DenseNodes::new();
@@ -495,13 +495,13 @@ mod tests {
         building.refs = vec![3, 1, 1, -2];
 
         let mut group = osmformat::PrimitiveGroup::new();
-        group.set_dense(dense_nodes);
-        group.mut_ways().push(road);
-        group.mut_ways().push(building);
+        group.dense = MessageField::some(dense_nodes);
+        group.ways.push(road);
+        group.ways.push(building);
 
         let mut block = osmformat::PrimitiveBlock::new();
-        block.set_stringtable(string_table);
-        block.mut_primitivegroup().push(group);
+        block.stringtable = MessageField::some(string_table);
+        block.primitivegroup.push(group);
 
         let mut bytes = Vec::new();
         write_raw_blob(&mut bytes, "OSMData", block.write_to_bytes().unwrap());
@@ -514,7 +514,7 @@ mod tests {
         let blob_bytes = blob.write_to_bytes().unwrap();
 
         let mut header = fileformat::BlobHeader::new();
-        header.set_field_type(field_type.to_owned());
+        header.set_type(field_type.to_owned());
         header.set_datasize(blob_bytes.len().try_into().unwrap());
         let header_bytes = header.write_to_bytes().unwrap();
 
