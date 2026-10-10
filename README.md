@@ -13,7 +13,7 @@
 The foundation pins accepted revisions of both upstream foundations:
 
 - `geo-analysis`: `7b0274eb10339c7f2c3537e76cef9b41bae26f9e`
-- `3d-lab`: `6a18cb2d1fe9efdbae619c144b2180fdeb472172`
+- `3d-lab`: `5340bdf31de6761ed16737dd6d19da2431172fd6`
 
 ## Proven data path
 
