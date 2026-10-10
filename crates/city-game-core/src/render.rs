@@ -13,7 +13,7 @@ use three_d_core::Vec3;
 
 use crate::{CitySave, CityScenario, RoadClass, ScenarioBuilding, ZoneKind};
 
-pub const THREE_D_LAB_REVISION: &str = "6a18cb2d1fe9efdbae619c144b2180fdeb472172";
+pub const THREE_D_LAB_REVISION: &str = "5340bdf31de6761ed16737dd6d19da2431172fd6";
 
 const MIN_VERTICAL_SPAN: f32 = 150.0;
 const FRAMING_PADDING: f32 = 1.1;
