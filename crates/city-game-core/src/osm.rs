@@ -13,7 +13,7 @@ use crate::{
     ScenarioWater, TransitKind, WaterKind,
 };
 
-pub const GEO_ANALYSIS_REVISION: &str = "c4df63a023f2183d700a9a28071d732d345e7c25";
+pub const GEO_ANALYSIS_REVISION: &str = "7b0274eb10339c7f2c3537e76cef9b41bae26f9e";
 pub const OSM_PARSER_REPOSITORY: &str = "https://github.com/moritzbrantner/geo-analysis";
 
 const LATITUDE_METERS_PER_DEGREE: f64 = 111_320.0;
