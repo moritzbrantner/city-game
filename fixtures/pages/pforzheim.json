@@ -6,7 +6,7 @@
     "sourceSha256": "550ebb431a41f5b14af1951a0d662f60ea2055b1ba2dab35680a8a3e8ad4d99b",
     "parser": {
       "repository": "https://github.com/moritzbrantner/geo-analysis",
-      "revision": "c4df63a023f2183d700a9a28071d732d345e7c25"
+      "revision": "7b0274eb10339c7f2c3537e76cef9b41bae26f9e"
     }
   },
   "roads": [
