@@ -15,8 +15,8 @@ repository = "https://github.com/moritzbrantner/city-game"
 [workspace.dependencies]
 geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "7b0274eb10339c7f2c3537e76cef9b41bae26f9e" }
 geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "7b0274eb10339c7f2c3537e76cef9b41bae26f9e" }
-protobuf = "=2.28.0"
-osmpbfreader = "=0.16.1"
+protobuf = "=3.7.2"
+osmpbfreader = "=0.19.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde-json = { package = "serde_json", version = "=1.0.151" }
 sha2 = "=0.11.0"
