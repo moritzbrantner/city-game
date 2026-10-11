@@ -84,6 +84,82 @@ impl From<PopulationError> for CityCommandError {
     }
 }
 
+/// Explicit render-invalidation result of one executed [`CityCommand`].
+///
+/// It names the effective-state entities whose derived render nodes may have changed; it carries
+/// no geometry and is not authoritative state. Derived render state re-reads those entities from
+/// the [`CitySave`] (see [`crate::PreparedCityRender::apply`]). An empty impact means the command
+/// left every render input unchanged.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[must_use]
+pub struct CityRenderImpact {
+    invalidated: Vec<RenderInvalidation>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RenderInvalidation {
+    /// A player road or zone may have been added or removed under this id.
+    PlayerEntity(String),
+    /// The suppression state of this imported scenario entity may have changed.
+    ScenarioEntity(String),
+}
+
+impl CityRenderImpact {
+    /// True when no render input changed (for example an authoritative no-op).
+    #[must_use]
+    pub fn is_unchanged(&self) -> bool {
+        self.invalidated.is_empty()
+    }
+
+    /// Number of invalidated entities. Bounded by the command, not by city size.
+    #[must_use]
+    pub fn invalidated_entities(&self) -> usize {
+        self.invalidated.len()
+    }
+
+    pub(crate) fn invalidated(&self) -> &[RenderInvalidation] {
+        &self.invalidated
+    }
+
+    fn planning(command: &PlanningCommand) -> Self {
+        let invalidation = match command {
+            PlanningCommand::AddRoad { road } => RenderInvalidation::PlayerEntity(road.id.clone()),
+            PlanningCommand::ZoneArea { zone } => RenderInvalidation::PlayerEntity(zone.id.clone()),
+            PlanningCommand::RemovePlayerRoad { id } | PlanningCommand::RemoveZone { id } => {
+                RenderInvalidation::PlayerEntity(id.clone())
+            }
+            PlanningCommand::SuppressScenarioEntity { id }
+            | PlanningCommand::RestoreScenarioEntity { id } => {
+                RenderInvalidation::ScenarioEntity(id.clone())
+            }
+        };
+        Self {
+            invalidated: vec![invalidation],
+        }
+    }
+
+    /// Restart replaces mutable world state; only the planning overlay feeds rendering, so the
+    /// impact is exactly the overlay that existed before the restart.
+    fn restart(world: &CityWorld) -> Self {
+        let planning = &world.planning;
+        let invalidated = planning
+            .player_roads
+            .keys()
+            .chain(planning.zones.keys())
+            .cloned()
+            .map(RenderInvalidation::PlayerEntity)
+            .chain(
+                planning
+                    .suppressed_scenario_entities
+                    .iter()
+                    .cloned()
+                    .map(RenderInvalidation::ScenarioEntity),
+            )
+            .collect();
+        Self { invalidated }
+    }
+}
+
 impl CitySave {
     /// Executes application/player intent.
     ///
@@ -93,6 +169,16 @@ impl CitySave {
         &mut self,
         command: CityCommand,
     ) -> Result<CityCommandOutcome, CityCommandError> {
+        self.execute_with_render_impact(command)
+            .map(|(outcome, _)| outcome)
+    }
+
+    /// The same validated command gateway as [`CitySave::execute`], additionally returning the
+    /// explicit render impact of the outcome so derived render state can update incrementally.
+    pub fn execute_with_render_impact(
+        &mut self,
+        command: CityCommand,
+    ) -> Result<(CityCommandOutcome, CityRenderImpact), CityCommandError> {
         self.ruleset.validate()?;
 
         match command {
@@ -100,15 +186,22 @@ impl CitySave {
                 if !self.ruleset.is_enabled(RuleSystem::Planning) {
                     return Err(CityCommandError::SystemDisabled(RuleSystem::Planning));
                 }
-                Ok(CityCommandOutcome::Planning(self.apply_planning(command)?))
+                let impact = CityRenderImpact::planning(&command);
+                let outcome = self.apply_planning(command)?;
+                let impact = match outcome {
+                    PlanningOutcome::Applied => impact,
+                    PlanningOutcome::Unchanged => CityRenderImpact::default(),
+                };
+                Ok((CityCommandOutcome::Planning(outcome), impact))
             }
             CityCommand::Restart => {
+                let impact = CityRenderImpact::restart(&self.world);
                 if self.ruleset.is_enabled(RuleSystem::Population) {
                     self.restart()?;
                 } else {
                     self.world = CityWorld::default();
                 }
-                Ok(CityCommandOutcome::Restarted)
+                Ok((CityCommandOutcome::Restarted, impact))
             }
         }
     }

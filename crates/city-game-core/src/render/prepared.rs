@@ -18,6 +18,20 @@ pub(crate) struct PreparedCamera {
     depth: [f32; 2],
 }
 
+impl PreparedCamera {
+    /// Transport form of a fitted overview camera.
+    pub(crate) fn from_camera(camera: OrthographicCamera, aspect: f32) -> Self {
+        Self {
+            aspect,
+            eye: [camera.eye.x, camera.eye.y, camera.eye.z],
+            target: [camera.target.x, camera.target.y, camera.target.z],
+            up: [camera.up.x, camera.up.y, camera.up.z],
+            frustum: [camera.left, camera.right, camera.bottom, camera.top],
+            depth: [camera.near, camera.far],
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub(crate) struct PreparedFrame {
     pub frame: RendererFrame,
@@ -34,14 +48,7 @@ pub(crate) fn prepare_save_frame(
     let (mut nodes, fit_points) = save_render_parts(save);
     nodes.sort_by(|left, right| left.id.cmp(&right.id));
     let camera = fit_orthographic_camera(&fit_points, aspect)?;
-    let overview = PreparedCamera {
-        aspect,
-        eye: [camera.eye.x, camera.eye.y, camera.eye.z],
-        target: [camera.target.x, camera.target.y, camera.target.z],
-        up: [camera.up.x, camera.up.y, camera.up.z],
-        frustum: [camera.left, camera.right, camera.bottom, camera.top],
-        depth: [camera.near, camera.far],
-    };
+    let overview = PreparedCamera::from_camera(camera, aspect);
     Ok(PreparedFrame {
         frame: renderer_frame(nodes, camera, aspect),
         overview,

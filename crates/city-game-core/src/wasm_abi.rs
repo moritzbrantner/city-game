@@ -2,11 +2,9 @@ use std::str;
 
 use serde_json::json;
 
-use crate::CitySave;
 use crate::browser_transport::{
-    execute_json, execute_live_json, new_save_json, prepare_live_render_json, prepare_render_json,
-    query_json, query_live_json, render_camera_json, render_frame_json,
-    render_frame_with_view_json, save_from_scenario_json,
+    CitySession, execute_json, new_save_json, prepare_render_json, query_json, render_camera_json,
+    render_frame_json, render_frame_with_view_json,
 };
 
 #[unsafe(no_mangle)]
@@ -41,10 +39,10 @@ pub extern "C" fn city_game_new_save(scenario_ptr: u32, scenario_len: u32) -> u6
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_session_create(scenario_ptr: u32, scenario_len: u32) -> u64 {
     let response = match read_input(scenario_ptr, scenario_len)
-        .and_then(|scenario| save_from_scenario_json(&scenario))
+        .and_then(|scenario| CitySession::from_scenario_json(&scenario))
     {
-        Ok(save) => {
-            let handle = Box::into_raw(Box::new(save)) as *mut CitySave as u32;
+        Ok(session) => {
+            let handle = Box::into_raw(Box::new(session)) as *mut CitySession as u32;
             serde_json::to_string(&json!({ "ok": true, "handle": handle }))
                 .expect("session handle response is serializable")
         }
@@ -62,7 +60,7 @@ pub extern "C" fn city_game_session_destroy(handle: u32) {
     // SAFETY: the browser wrapper receives this exact pointer from
     // `city_game_session_create`, owns it exclusively, and destroys it at most once.
     unsafe {
-        drop(Box::from_raw(handle as *mut CitySave));
+        drop(Box::from_raw(handle as *mut CitySession));
     }
 }
 
@@ -73,7 +71,7 @@ pub extern "C" fn city_game_session_execute(
     command_len: u32,
 ) -> u64 {
     let response = match read_input(command_ptr, command_len) {
-        Ok(command) => match with_live_save_mut(handle, |save| execute_live_json(save, &command)) {
+        Ok(command) => match with_session_mut(handle, |session| session.execute_json(&command)) {
             Ok(response) => response,
             Err(error) => error_response(&error),
         },
@@ -85,7 +83,7 @@ pub extern "C" fn city_game_session_execute(
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_session_query(handle: u32, query_ptr: u32, query_len: u32) -> u64 {
     let response = match read_input(query_ptr, query_len) {
-        Ok(query) => match with_live_save(handle, |save| query_live_json(save, &query)) {
+        Ok(query) => match with_session(handle, |session| session.query_json(&query)) {
             Ok(response) => response,
             Err(error) => error_response(&error),
         },
@@ -96,7 +94,7 @@ pub extern "C" fn city_game_session_query(handle: u32, query_ptr: u32, query_len
 
 #[unsafe(no_mangle)]
 pub extern "C" fn city_game_session_prepare_render(handle: u32, aspect: f32) -> u64 {
-    let response = match with_live_save(handle, |save| prepare_live_render_json(save, aspect)) {
+    let response = match with_session_mut(handle, |session| session.prepare_render_json(aspect)) {
         Ok(response) => response,
         Err(error) => error_response(&error),
     };
@@ -175,7 +173,7 @@ pub extern "C" fn city_game_render_frame_view(
     write_output(response)
 }
 
-fn with_live_save<T>(handle: u32, use_save: impl FnOnce(&CitySave) -> T) -> Result<T, String> {
+fn with_session<T>(handle: u32, use_session: impl FnOnce(&CitySession) -> T) -> Result<T, String> {
     if handle == 0 {
         return Err("city-game session handle must be non-zero".to_owned());
     }
@@ -183,13 +181,13 @@ fn with_live_save<T>(handle: u32, use_save: impl FnOnce(&CitySave) -> T) -> Resu
     // SAFETY: session handles are private to the synchronous browser wrapper. The wrapper owns
     // each handle exclusively from create through destroy and rejects use after disposal. The
     // reference is scoped to this call and cannot escape through the closure signature.
-    let save = unsafe { &*(handle as *const CitySave) };
-    Ok(use_save(save))
+    let session = unsafe { &*(handle as *const CitySession) };
+    Ok(use_session(session))
 }
 
-fn with_live_save_mut<T>(
+fn with_session_mut<T>(
     handle: u32,
-    use_save: impl FnOnce(&mut CitySave) -> T,
+    use_session: impl FnOnce(&mut CitySession) -> T,
 ) -> Result<T, String> {
     if handle == 0 {
         return Err("city-game session handle must be non-zero".to_owned());
@@ -197,8 +195,8 @@ fn with_live_save_mut<T>(
 
     // SAFETY: the wrapper never aliases mutable session operations. WASM calls are synchronous,
     // one JS CityGameSession owns each handle, and the mutable reference cannot escape this call.
-    let save = unsafe { &mut *(handle as *mut CitySave) };
-    Ok(use_save(save))
+    let session = unsafe { &mut *(handle as *mut CitySession) };
+    Ok(use_session(session))
 }
 
 fn respond_with_one(ptr: u32, len: u32, handler: fn(&str) -> String) -> u64 {

@@ -202,6 +202,7 @@ const road = { id: "player/road/regression", class: "residential",
 const zone = (kind) => ({ id: `player/zone/${kind}`, kind,
   geometry: { type: "Polygon", coordinates: [[[9, 49], [9.01, 49], [9.01, 49.01], [9, 49]]] } });
 
+let incrementalSuppressions = 0;
 function apply(command, expected = "applied") {
   const previous = session.renderFrame(aspect, views[0]);
   const result = session.execute(command);
@@ -214,6 +215,18 @@ function apply(command, expected = "applied") {
   assert.deepEqual(next, reference(save, views[0]));
   assert.deepEqual(save.scenario, pristine.scenario, "planning changed immutable imported scenario");
   assert.equal(observed.snapshot().preparations, expected === "unchanged" ? 0 : 1);
+  if (expected !== "unchanged") {
+    // The live session updates its retained Rust render state from the command's explicit
+    // render impact (#53). Suppression never moves the projection origin, so it must not rebuild.
+    const work = observed.snapshot().renderWork;
+    assert.ok(work, "session preparation reported no render work");
+    if (["suppressScenarioEntity", "restoreScenarioEntity"].includes(command.command?.kind)) {
+      assert.equal(work.fullRebuilds, 0, `${command.command.kind} rebuilt the whole scene`);
+      assert.equal(work.fullSorts, 0, `${command.command.kind} re-sorted the whole scene`);
+      assert.equal(work.entitiesVisited, 1, `${command.command.kind} visited unrelated entities`);
+      incrementalSuppressions++;
+    }
+  }
   if (expected === "unchanged") assert.strictEqual(next, previous);
   else assert.notStrictEqual(next.nodes, previous.nodes);
   for (const kind of ["planning", "effectiveRoads", "populationState", "developedPopulationCapacity", "timePosition"]) {
@@ -259,6 +272,11 @@ for (const entity of [...fixture.roads, ...fixture.buildings, ...fixture.water])
   assert.ok(restored.nodes.some((node) => node.id === entity.id || node.id.startsWith(entity.id + "/")));
   apply(planning({ kind: "restoreScenarioEntity", id: entity.id }), "unchanged");
 }
+assert.equal(
+  incrementalSuppressions,
+  2 * (fixture.roads.length + fixture.buildings.length + fixture.water.length),
+);
+checks.push("retained-session/incremental-suppression-without-full-rebuild");
 reject(planning({ kind: "suppressScenarioEntity", id: "unknown/scenario/entity" }));
 reject(planning({ kind: "restoreScenarioEntity", id: "unknown/scenario/entity" }));
 

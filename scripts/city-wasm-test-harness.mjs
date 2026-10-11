@@ -32,6 +32,7 @@ export function harness(wasm) {
       sessionOperationOutputBytes: 0,
       maxSessionOperationInputBytes: 0,
       maxSessionOperationOutputBytes: 0,
+      renderWork: null,
     };
   };
   reset();
@@ -88,6 +89,8 @@ export function harness(wasm) {
         stats.maxSessionOperationOutputBytes = Math.max(stats.maxSessionOperationOutputBytes, output.len);
       } else if (name === "city_game_session_prepare_render" || name === "city_game_prepare_render") {
         stats.preparations++;
+        // Rust-reported render work since the previous session preparation (#53).
+        if (name === "city_game_session_prepare_render") stats.renderWork = decodeOutput(output).work ?? null;
       } else if (name === "city_game_render_camera") {
         const inputBytes = args[1] + args[3];
         stats.cameraCalls++;
