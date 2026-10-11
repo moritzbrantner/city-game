@@ -1,0 +1,15 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "packageRules": [
+    {
+      "description": "3d-lab crates share types (three-d-core) and must move to the same commit together",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchDepNames": [
+        "three-d-*"
+      ],
+      "groupName": "3d-lab"
+    }
+  ]
+}
