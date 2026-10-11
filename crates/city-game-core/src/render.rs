@@ -1,5 +1,8 @@
+mod incremental;
 #[cfg(any(test, target_arch = "wasm32"))]
 mod prepared;
+
+pub use incremental::{PreparedCityRender, RenderPreparationWork};
 
 #[cfg(any(test, target_arch = "wasm32"))]
 pub(crate) use prepared::{PreparedCamera, prepare_save_frame, prepared_camera_view};
@@ -11,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use three_d_camera::{CameraError, OrthographicCamera};
 use three_d_core::Vec3;
 
-use crate::{CitySave, CityScenario, RoadClass, ScenarioBuilding, ZoneKind};
+use crate::{
+    CitySave, CityScenario, PlannedZone, RoadClass, ScenarioBuilding, ScenarioLandUse,
+    ScenarioWater, ZoneKind,
+};
 
 pub const THREE_D_LAB_REVISION: &str = "5340bdf31de6761ed16737dd6d19da2431172fd6";
 
@@ -204,6 +210,12 @@ impl GameWorldProjection {
         }
     }
 
+    /// The projection is fully determined by its origin.
+    fn same_origin(self, other: Self) -> bool {
+        self.origin_lon.to_bits() == other.origin_lon.to_bits()
+            && self.origin_lat.to_bits() == other.origin_lat.to_bits()
+    }
+
     fn project(self, position: [f64; 2]) -> [f32; 2] {
         let x = (position[0] - self.origin_lon) * self.longitude_meters_per_degree;
         let z = -(position[1] - self.origin_lat) * self.latitude_meters_per_degree;
@@ -261,28 +273,10 @@ fn scenario_render_parts(scenario: &CityScenario) -> (Vec<RendererSceneNode>, Ve
         append_building_node(building, projection, &mut nodes, &mut fit_points);
     }
     for water in &scenario.water {
-        append_area_node(
-            &water.id,
-            &water.geometry,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-            0x5b9bd5,
-            Some(0.72),
-            0.15,
-        );
+        append_water_node(water, projection, &mut nodes, &mut fit_points);
     }
     for land_use in &scenario.land_use_areas {
-        append_area_node(
-            &land_use.id,
-            &land_use.geometry,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-            0x7fa36b,
-            None,
-            0.08,
-        );
+        append_land_use_node(land_use, projection, &mut nodes, &mut fit_points);
     }
 
     (nodes, fit_points)
@@ -309,43 +303,16 @@ fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
         if planning.is_suppressed(&water.id) {
             continue;
         }
-        append_area_node(
-            &water.id,
-            &water.geometry,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-            0x5b9bd5,
-            Some(0.72),
-            0.15,
-        );
+        append_water_node(water, projection, &mut nodes, &mut fit_points);
     }
     for land_use in &save.scenario.land_use_areas {
         if planning.is_suppressed(&land_use.id) {
             continue;
         }
-        append_area_node(
-            &land_use.id,
-            &land_use.geometry,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-            0x7fa36b,
-            None,
-            0.08,
-        );
+        append_land_use_node(land_use, projection, &mut nodes, &mut fit_points);
     }
     for zone in planning.zones.values() {
-        append_area_node(
-            &zone.id,
-            &zone.geometry,
-            projection,
-            &mut nodes,
-            &mut fit_points,
-            zone_color(zone.kind),
-            Some(0.34),
-            0.12,
-        );
+        append_zone_node(zone, projection, &mut nodes, &mut fit_points);
     }
 
     (nodes, fit_points)
@@ -386,12 +353,16 @@ fn renderer_frame(
     aspect: f32,
 ) -> RendererFrame {
     RendererFrame {
-        camera: RendererCamera {
-            aspect,
-            view_matrix: camera.view_matrix().elements,
-            projection_matrix: camera.projection_matrix().elements,
-        },
+        camera: renderer_camera(camera, aspect),
         nodes,
+    }
+}
+
+fn renderer_camera(camera: OrthographicCamera, aspect: f32) -> RendererCamera {
+    RendererCamera {
+        aspect,
+        view_matrix: camera.view_matrix().elements,
+        projection_matrix: camera.projection_matrix().elements,
     }
 }
 
@@ -433,12 +404,109 @@ fn fit_orthographic_camera(
             .max(point.y.abs())
             .max(point.z.abs())
     });
-    let eye_distance = (max_coordinate * 2.0).max(100.0);
+    let eye_distance = overview_eye_distance(max_coordinate);
+
+    if fit_points.is_empty() {
+        return overview_camera_from_extents(eye_distance, None, aspect);
+    }
+
+    let view = overview_orientation(eye_distance)?.view_matrix();
+    let extents = CameraExtents::of_points(fit_points, |point| view.transform_point(point));
+    overview_camera_from_extents(eye_distance, extents, aspect)
+}
+
+/// Overview eye distance from the largest absolute fit-point coordinate.
+fn overview_eye_distance(max_coordinate: f32) -> f32 {
+    (max_coordinate * 2.0).max(100.0)
+}
+
+/// Orientation-only camera whose view matrix maps fit points into overview camera space.
+fn overview_orientation(eye_distance: f32) -> Result<OrthographicCamera, CameraError> {
+    OrthographicCamera::new(
+        Vec3::new(eye_distance, eye_distance, eye_distance),
+        Vec3::ZERO,
+        Vec3::new(0.0, 1.0, 0.0),
+        -1.0,
+        1.0,
+        -1.0,
+        1.0,
+        0.1,
+        eye_distance * 8.0,
+    )
+}
+
+/// Axis-aligned extents of fit points in overview camera space. Min/max are order-independent,
+/// so extents merged per entity equal extents folded over the complete point list.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct CameraExtents {
+    min: [f32; 3],
+    max: [f32; 3],
+}
+
+impl CameraExtents {
+    fn of_points(points: &[Vec3], transform: impl Fn(Vec3) -> Vec3) -> Option<Self> {
+        let (first, rest) = points.split_first()?;
+        let first = transform(*first);
+        let mut extents = Self {
+            min: [first.x, first.y, first.z],
+            max: [first.x, first.y, first.z],
+        };
+        for point in rest {
+            let point = transform(*point);
+            extents.min = [
+                extents.min[0].min(point.x),
+                extents.min[1].min(point.y),
+                extents.min[2].min(point.z),
+            ];
+            extents.max = [
+                extents.max[0].max(point.x),
+                extents.max[1].max(point.y),
+                extents.max[2].max(point.z),
+            ];
+        }
+        Some(extents)
+    }
+
+    fn merge(self, other: Self) -> Self {
+        Self {
+            min: [
+                self.min[0].min(other.min[0]),
+                self.min[1].min(other.min[1]),
+                self.min[2].min(other.min[2]),
+            ],
+            max: [
+                self.max[0].max(other.max[0]),
+                self.max[1].max(other.max[1]),
+                self.max[2].max(other.max[2]),
+            ],
+        }
+    }
+
+    /// Whether removing `self` from a set whose merged extents are `aggregate` can change them.
+    fn touches(self, aggregate: Self) -> bool {
+        (0..3).any(|axis| {
+            self.min[axis] == aggregate.min[axis] || self.max[axis] == aggregate.max[axis]
+        })
+    }
+}
+
+fn overview_camera_from_extents(
+    eye_distance: f32,
+    extents: Option<CameraExtents>,
+    aspect: f32,
+) -> Result<OrthographicCamera, CameraError> {
+    if !aspect.is_finite() || aspect <= 0.0 {
+        return Err(CameraError::InvalidAspect);
+    }
     let eye = Vec3::new(eye_distance, eye_distance, eye_distance);
     let target = Vec3::ZERO;
     let up = Vec3::new(0.0, 1.0, 0.0);
 
-    if fit_points.is_empty() {
+    let Some(CameraExtents {
+        min: [min_x, min_y, min_z],
+        max: [max_x, max_y, max_z],
+    }) = extents
+    else {
         let half_height = MIN_VERTICAL_SPAN * 0.5;
         let half_width = half_height * aspect;
         return OrthographicCamera::new(
@@ -452,38 +520,7 @@ fn fit_orthographic_camera(
             0.1,
             eye_distance * 8.0,
         );
-    }
-
-    let orientation_camera = OrthographicCamera::new(
-        eye,
-        target,
-        up,
-        -1.0,
-        1.0,
-        -1.0,
-        1.0,
-        0.1,
-        eye_distance * 8.0,
-    )?;
-    let view = orientation_camera.view_matrix();
-
-    let first = view.transform_point(fit_points[0]);
-    let mut min_x = first.x;
-    let mut max_x = first.x;
-    let mut min_y = first.y;
-    let mut max_y = first.y;
-    let mut min_z = first.z;
-    let mut max_z = first.z;
-
-    for point in &fit_points[1..] {
-        let camera_point = view.transform_point(*point);
-        min_x = min_x.min(camera_point.x);
-        max_x = max_x.max(camera_point.x);
-        min_y = min_y.min(camera_point.y);
-        max_y = max_y.max(camera_point.y);
-        min_z = min_z.min(camera_point.z);
-        max_z = max_z.max(camera_point.z);
-    }
+    };
 
     let center_x = (min_x + max_x) * 0.5;
     let center_y = (min_y + max_y) * 0.5;
@@ -540,7 +577,7 @@ fn append_road_nodes(
             let angle = dx.atan2(dz);
             let half = angle * 0.5;
             nodes.push(RendererSceneNode {
-                id: format!("{id}/road-segment-{segment_index}"),
+                id: road_segment_node_id(id, segment_index),
                 geometry: RendererGeometry::Box {
                     size: [width, 0.25, length],
                 },
@@ -601,6 +638,64 @@ fn append_building_node(
         0xb5aa98,
         None,
         building_height(building),
+    );
+}
+
+fn road_segment_node_id(road_id: &str, segment_index: usize) -> String {
+    format!("{road_id}/road-segment-{segment_index}")
+}
+
+fn append_water_node(
+    water: &ScenarioWater,
+    projection: GameWorldProjection,
+    nodes: &mut Vec<RendererSceneNode>,
+    fit_points: &mut Vec<Vec3>,
+) {
+    append_area_node(
+        &water.id,
+        &water.geometry,
+        projection,
+        nodes,
+        fit_points,
+        0x5b9bd5,
+        Some(0.72),
+        0.15,
+    );
+}
+
+fn append_land_use_node(
+    land_use: &ScenarioLandUse,
+    projection: GameWorldProjection,
+    nodes: &mut Vec<RendererSceneNode>,
+    fit_points: &mut Vec<Vec3>,
+) {
+    append_area_node(
+        &land_use.id,
+        &land_use.geometry,
+        projection,
+        nodes,
+        fit_points,
+        0x7fa36b,
+        None,
+        0.08,
+    );
+}
+
+fn append_zone_node(
+    zone: &PlannedZone,
+    projection: GameWorldProjection,
+    nodes: &mut Vec<RendererSceneNode>,
+    fit_points: &mut Vec<Vec3>,
+) {
+    append_area_node(
+        &zone.id,
+        &zone.geometry,
+        projection,
+        nodes,
+        fit_points,
+        zone_color(zone.kind),
+        Some(0.34),
+        0.12,
     );
 }
 
@@ -683,6 +778,23 @@ impl GeographicBounds {
         self.max_lon = self.max_lon.max(lon);
         self.min_lat = self.min_lat.min(lat);
         self.max_lat = self.max_lat.max(lat);
+    }
+
+    fn merge(self, other: Self) -> Self {
+        Self {
+            min_lon: self.min_lon.min(other.min_lon),
+            max_lon: self.max_lon.max(other.max_lon),
+            min_lat: self.min_lat.min(other.min_lat),
+            max_lat: self.max_lat.max(other.max_lat),
+        }
+    }
+
+    /// Whether removing `self` from a set whose merged bounds are `aggregate` can change them.
+    fn touches(self, aggregate: Self) -> bool {
+        self.min_lon == aggregate.min_lon
+            || self.max_lon == aggregate.max_lon
+            || self.min_lat == aggregate.min_lat
+            || self.max_lat == aggregate.max_lat
     }
 
     fn center(self) -> [f64; 2] {

@@ -6,8 +6,9 @@ use std::{
 };
 
 use city_game_core::{
-    BuildingUse, CityScenario, ExternalRevision, SCENARIO_SCHEMA_VERSION, ScenarioBuilding,
-    ScenarioProvenance, build_render_frame,
+    BuildingUse, CityCommand, CitySave, CityScenario, ExternalRevision, PlanningCommand,
+    PreparedCityRender, RenderPreparationWork, SCENARIO_SCHEMA_VERSION, ScenarioBuilding,
+    ScenarioProvenance, build_render_frame, build_save_render_frame,
 };
 use geo_core::Geometry;
 use serde_json::{Value, json};
@@ -118,6 +119,8 @@ fn main() {
         );
     }
 
+    let localized_work = localized_incremental_work(&scenario, buildings);
+
     let elapsed: Vec<_> = measurements
         .iter()
         .map(|sample| sample.elapsed_ns)
@@ -148,6 +151,7 @@ fn main() {
             "elapsedSamplesNs": elapsed,
             "allocationCallSamples": allocation_counts,
             "allocatedByteSamples": allocated_bytes,
+            "localizedIncrementalWork": localized_work,
             "timing": "advisory-host-local",
             "allocationBudget": if smoke { "blocking" } else { "observation-only" }
         })
@@ -206,6 +210,47 @@ fn measure_render(scenario: &CityScenario, expected_nodes: usize) -> Sample {
         allocations: ALLOCATIONS.load(Ordering::Relaxed),
         allocated_bytes: ALLOCATED_BYTES.load(Ordering::Relaxed),
     }
+}
+
+/// Deterministic work-count ratchet (city-game#53): on the same large synthetic scene, a localized
+/// suppress/restore of one interior building updates only that building's derived node, never the
+/// whole prepared scene, and stays equal to the full reference composition.
+fn localized_incremental_work(
+    scenario: &CityScenario,
+    buildings: usize,
+) -> Vec<RenderPreparationWork> {
+    let aspect = 16.0 / 9.0;
+    let mut save = CitySave::new(scenario.clone()).unwrap();
+    let mut prepared = PreparedCityRender::prepare(&save, aspect).unwrap();
+    assert_eq!(prepared.last_work().full_rebuilds, 1);
+    let interior = format!("benchmark/building/{:06}", buildings / 2 + 64);
+    let mut works = Vec::new();
+    for command in [
+        PlanningCommand::SuppressScenarioEntity {
+            id: interior.clone(),
+        },
+        PlanningCommand::RestoreScenarioEntity { id: interior },
+    ] {
+        let (_, impact) = save
+            .execute_with_render_impact(CityCommand::Planning { command })
+            .unwrap();
+        prepared.apply(&save, &impact).unwrap();
+        let work = prepared.last_work();
+        assert_eq!(
+            (work.full_rebuilds, work.full_sorts, work.overview_refits),
+            (0, 0, 0),
+            "localized change rebuilt, re-sorted, or refit the scene: {work:?}"
+        );
+        assert_eq!(work.entities_visited, 1, "{work:?}");
+        assert_eq!(work.nodes_built + work.nodes_removed, 1, "{work:?}");
+        assert_eq!(
+            prepared.frame(),
+            &build_save_render_frame(&save, aspect).unwrap(),
+            "incremental frame diverged from the full reference"
+        );
+        works.push(work);
+    }
+    works
 }
 
 fn median(values: &[u64]) -> u64 {

@@ -7,8 +7,11 @@ only the fitted overview and `RenderView` to Rust; `three-d-camera` still produc
 matrices. Nodes retain their array/object identity. An identical view crosses no WASM
 boundary. Preparation is not saved, authoritative state, or a cross-session registry.
 
-Every successful command invalidates preparation except the explicit authoritative
-`planning / unchanged` receipt. Rejected commands and read-only queries retain it.
+Every successful command invalidates the browser's cached frame except the explicit
+authoritative `planning / unchanged` receipt. Rejected commands and read-only queries retain it.
+Re-preparation after such an invalidation is incremental in Rust (see
+[incremental render preparation](#incremental-render-preparation)); the browser only forwards the
+re-prepared node array and never diffs scenes itself.
 Aspect changes replace the bounded one-entry cache. Failed preparation/camera operations
 cannot publish partial data. Every view is relative to the fitted overview, not the last
 camera, avoiding accumulated drift.
@@ -20,6 +23,32 @@ the retained Three.js scene without scene-node/resource reconciliation. Full val
 full `render(frame)` remain mandatory whenever the node array changes. Selection decoration
 is materialized once per `(node array, selected entity, accent)` and reused while the camera
 moves; a selection, accent, or scene change submits a fresh full scene.
+
+## Incremental render preparation
+
+`PreparedCityRender` (city-game-core) is the retained, disposable render state behind each
+browser session. `CitySave::execute_with_render_impact` is the same validated command gateway
+as `CitySave::execute` and additionally returns a `CityRenderImpact`: the planning-overlay or
+scenario entity ids whose derived nodes may have changed (restart names the overlay that existed
+before it). `PreparedCityRender::apply` re-reads only those entities from the save:
+
+- immutable scenario nodes are derived once per projection; suppression moves them between the
+  frame and a hidden slot, restoration moves them back without re-deriving geometry;
+- player roads and zones are re-derived and inserted at their sorted positions;
+- the overview is maintained from per-entity summaries and refit only when a removed entity
+  touched the aggregate extremes or an added one extends them;
+- an overlay change that moves the projection origin (the centre of scenario + overlay
+  geographic bounds) changes every translation and deliberately falls back to full preparation.
+
+The full composition (`build_save_render_frame`) stays the reference oracle and fallback.
+`crates/city-game-core/tests/incremental_render_preparation.rs` compares the incremental frame
+and inspection cameras with it after every step and ratchets deterministic work counters
+(`fullRebuilds`, `entitiesVisited`, `nodesBuilt`, `nodesRemoved`, `fullSorts`,
+`overviewRefits`) so localized work is identical on 8x8 and 40x40 cities. The session's
+`city_game_session_prepare_render` response carries the work since the previous preparation;
+the release-WASM smoke requires every suppression/restoration to report zero full rebuilds and
+sorts, and the render benchmark ratchets the same counters on its 4,096-building scene.
+Transport is unchanged: the re-prepared frame JSON still scales with scene size.
 
 ## Blocking contract
 

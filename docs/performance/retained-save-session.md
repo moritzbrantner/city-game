@@ -3,8 +3,9 @@
 ## Ownership
 
 The canonical browser app owns one opaque WASM session for the currently loaded city. The
-session owns the live `CitySave` in Rust. JavaScript owns only the opaque handle plus disposable
-render/picking projections.
+session owns the live `CitySave` in Rust together with its disposable `PreparedCityRender`, which
+each command updates incrementally through its explicit render impact. JavaScript owns only the
+opaque handle plus disposable render/picking projections.
 
 Application writes still enter through `CitySave::execute(CityCommand)`; reads still use the
 authoritative query boundary. The session transport does not add a second planning, persistence,
@@ -41,8 +42,9 @@ After creation:
 - a query response contains the requested projection only; and
 - render preparation takes only the opaque handle plus aspect. It receives no serialized save.
 
-Scene preparation can still scale with effective city geometry because it deliberately emits the
-render scene. Camera-only navigation remains on the existing prepared-camera path and stays
+Render-preparation work after a localized command scales with the changed entities rather than
+the city (see `camera-navigation.md`); the emitted frame JSON still scales with effective city
+geometry because it deliberately emits the render scene. Camera-only navigation remains on the existing prepared-camera path and stays
 independent of scene size after preparation.
 
 ## Regression evidence
