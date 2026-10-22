@@ -80,9 +80,9 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "base64"
-version = "0.22.1"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "bitflags"
@@ -126,8 +126,8 @@ version = "0.1.0"
 dependencies = [
  "moenarch-geo-core",
  "moenarch-geo-io-osm",
- "osmpbfreader 0.19.1",
- "protobuf 3.7.2",
+ "osmpbfreader",
+ "protobuf",
  "serde",
  "serde_json",
  "sha2",
@@ -278,10 +278,6 @@ name = "flat_map"
 version = "0.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4fa2a56a33c493fc81acbad4676c599cf2b128f21462a020043ea1eee46244f"
-dependencies = [
- "serde",
- "serde_derive",
-]
 
 [[package]]
 name = "flate2"
@@ -693,7 +689,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-core"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=21c0ad260c4798d57646dc0ea0f7648192f3868f#21c0ad260c4798d57646dc0ea0f7648192f3868f"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=052bf07cbd9ffd2726e7199ae98fd85c89bcb183#052bf07cbd9ffd2726e7199ae98fd85c89bcb183"
 dependencies = [
  "moritzbrantner-runtime-core",
  "serde",
@@ -703,7 +699,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-grid"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=21c0ad260c4798d57646dc0ea0f7648192f3868f#21c0ad260c4798d57646dc0ea0f7648192f3868f"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=052bf07cbd9ffd2726e7199ae98fd85c89bcb183#052bf07cbd9ffd2726e7199ae98fd85c89bcb183"
 dependencies = [
  "geo",
  "h3o",
@@ -714,7 +710,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-geojson"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=21c0ad260c4798d57646dc0ea0f7648192f3868f#21c0ad260c4798d57646dc0ea0f7648192f3868f"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=052bf07cbd9ffd2726e7199ae98fd85c89bcb183#052bf07cbd9ffd2726e7199ae98fd85c89bcb183"
 dependencies = [
  "geojson",
  "moenarch-geo-core",
@@ -727,13 +723,13 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-osm"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=21c0ad260c4798d57646dc0ea0f7648192f3868f#21c0ad260c4798d57646dc0ea0f7648192f3868f"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=052bf07cbd9ffd2726e7199ae98fd85c89bcb183#052bf07cbd9ffd2726e7199ae98fd85c89bcb183"
 dependencies = [
  "base64",
  "moenarch-geo-core",
  "moenarch-geo-io-geojson",
  "moritzbrantner-runtime-core",
- "osmpbfreader 0.16.1",
+ "osmpbfreader",
  "regex",
  "serde",
  "serde_json",
@@ -786,24 +782,6 @@ dependencies = [
 
 [[package]]
 name = "osmpbfreader"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31a9a5652ee5d1ac97f64960117f9165d2d185034c5ccf22f6fadd3fcb78ccb2"
-dependencies = [
- "byteorder",
- "flat_map",
- "flate2",
- "par-map",
- "protobuf 2.28.0",
- "protobuf-codegen-pure",
- "pub-iterator-type",
- "self_cell",
- "serde",
- "smartstring",
-]
-
-[[package]]
-name = "osmpbfreader"
 version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58a9aad3969d4c846bbbdd37fcdf77174fdc52e173bdc476981d543b0773307e"
@@ -812,8 +790,8 @@ dependencies = [
  "flat_map",
  "flate2",
  "par-map",
- "protobuf 3.7.2",
- "protobuf-codegen 3.7.2",
+ "protobuf",
+ "protobuf-codegen",
  "pub-iterator-type",
  "self_cell",
  "smartstring",
@@ -848,12 +826,6 @@ dependencies = [
 
 [[package]]
 name = "protobuf"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "106dd99e98437432fed6519dedecfade6a06a73bb7b2a1e019fdd2bee5778d94"
-
-[[package]]
-name = "protobuf"
 version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d65a1d4ddae7d8b5de68153b48f6aa3bba8cb002b243dbdbc55a5afbc98f99f4"
@@ -865,36 +837,17 @@ dependencies = [
 
 [[package]]
 name = "protobuf-codegen"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "033460afb75cf755fcfc16dfaed20b86468082a2ea24e05ac35ab4a099a017d6"
-dependencies = [
- "protobuf 2.28.0",
-]
-
-[[package]]
-name = "protobuf-codegen"
 version = "3.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d3976825c0014bbd2f3b34f0001876604fe87e0c86cd8fa54251530f1544ace"
 dependencies = [
  "anyhow",
  "once_cell",
- "protobuf 3.7.2",
+ "protobuf",
  "protobuf-parse",
  "regex",
  "tempfile",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "protobuf-codegen-pure"
-version = "2.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95a29399fc94bcd3eeaa951c715f7bea69409b2445356b00519740bcd6ddd865"
-dependencies = [
- "protobuf 2.28.0",
- "protobuf-codegen 2.28.0",
 ]
 
 [[package]]
@@ -906,7 +859,7 @@ dependencies = [
  "anyhow",
  "indexmap",
  "log",
- "protobuf 3.7.2",
+ "protobuf",
  "protobuf-support",
  "tempfile",
  "thiserror 1.0.69",
@@ -1227,7 +1180,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3fb72c633efbaa2dd666986505016c32c3044395ceaf881518399d2f4127ee29"
 dependencies = [
  "autocfg",
- "serde",
  "static_assertions",
  "version_check",
 ]
@@ -1343,7 +1295,7 @@ dependencies = [
 [[package]]
 name = "three-d-animation"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=bfeb9fafd8fef541e51236bf76b5b57ab73213d4#bfeb9fafd8fef541e51236bf76b5b57ab73213d4"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=c850bda5f37f65f79655469625baf5f1644ac2a0#c850bda5f37f65f79655469625baf5f1644ac2a0"
 dependencies = [
  "three-d-core",
 ]
@@ -1351,7 +1303,7 @@ dependencies = [
 [[package]]
 name = "three-d-camera"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=bfeb9fafd8fef541e51236bf76b5b57ab73213d4#bfeb9fafd8fef541e51236bf76b5b57ab73213d4"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=c850bda5f37f65f79655469625baf5f1644ac2a0#c850bda5f37f65f79655469625baf5f1644ac2a0"
 dependencies = [
  "three-d-animation",
  "three-d-core",
@@ -1360,7 +1312,7 @@ dependencies = [
 [[package]]
 name = "three-d-core"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=bfeb9fafd8fef541e51236bf76b5b57ab73213d4#bfeb9fafd8fef541e51236bf76b5b57ab73213d4"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=c850bda5f37f65f79655469625baf5f1644ac2a0#c850bda5f37f65f79655469625baf5f1644ac2a0"
 
 [[package]]
 name = "tiny-keccak"

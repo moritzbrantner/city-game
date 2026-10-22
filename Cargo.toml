@@ -13,12 +13,12 @@ rust-version = "1.98"
 repository = "https://github.com/moritzbrantner/city-game"
 
 [workspace.dependencies]
-geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "21c0ad260c4798d57646dc0ea0f7648192f3868f" }
-geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "21c0ad260c4798d57646dc0ea0f7648192f3868f" }
+geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "052bf07cbd9ffd2726e7199ae98fd85c89bcb183" }
+geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "052bf07cbd9ffd2726e7199ae98fd85c89bcb183" }
 protobuf = "=3.7.2"
 osmpbfreader = "=0.19.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde-json = { package = "serde_json", version = "=1.0.152" }
 sha2 = "=0.11.0"
-three-d-camera = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "bfeb9fafd8fef541e51236bf76b5b57ab73213d4" }
-three-d-core = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "bfeb9fafd8fef541e51236bf76b5b57ab73213d4" }
+three-d-camera = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "c850bda5f37f65f79655469625baf5f1644ac2a0" }
+three-d-core = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "c850bda5f37f65f79655469625baf5f1644ac2a0" }
