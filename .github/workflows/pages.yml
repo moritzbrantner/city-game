@@ -72,9 +72,9 @@ jobs:
     with:
       source_sha: ${{ github.event.workflow_run.head_sha || github.sha }}
       artifact_key: city-game-pages-v1
-      rust_toolchain: "1.98.0"
+      rust_toolchain: stable
       rust_targets: wasm32-unknown-unknown
-      bun_version: "1.3.14"
+      bun_version: latest
       cache_bun: true
       bun_cache_dependency_path: web/bun.lock
       build_command: bash scripts/build-pages.sh
