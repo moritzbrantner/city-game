@@ -11,6 +11,6 @@
     "test:picking-wasm": "node ../scripts/picking-smoke.mjs public/city-game-core.wasm"
   },
   "dependencies": {
-    "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#c850bda5f37f65f79655469625baf5f1644ac2a0"
+    "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#77122d13dbd06789dcce05473b0528e61ad69a44"
   }
 }
