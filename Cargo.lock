@@ -689,7 +689,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-core"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=1e2b964c7303312d5f0217c2536cc686d53120dd#1e2b964c7303312d5f0217c2536cc686d53120dd"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=8a3b3d37b312bbe110748d6a4958ee1cc7e69153#8a3b3d37b312bbe110748d6a4958ee1cc7e69153"
 dependencies = [
  "moritzbrantner-runtime-core",
  "serde",
@@ -699,7 +699,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-grid"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=1e2b964c7303312d5f0217c2536cc686d53120dd#1e2b964c7303312d5f0217c2536cc686d53120dd"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=8a3b3d37b312bbe110748d6a4958ee1cc7e69153#8a3b3d37b312bbe110748d6a4958ee1cc7e69153"
 dependencies = [
  "geo",
  "h3o",
@@ -710,7 +710,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-geojson"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=1e2b964c7303312d5f0217c2536cc686d53120dd#1e2b964c7303312d5f0217c2536cc686d53120dd"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=8a3b3d37b312bbe110748d6a4958ee1cc7e69153#8a3b3d37b312bbe110748d6a4958ee1cc7e69153"
 dependencies = [
  "geojson",
  "moenarch-geo-core",
@@ -723,7 +723,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-osm"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=1e2b964c7303312d5f0217c2536cc686d53120dd#1e2b964c7303312d5f0217c2536cc686d53120dd"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=8a3b3d37b312bbe110748d6a4958ee1cc7e69153#8a3b3d37b312bbe110748d6a4958ee1cc7e69153"
 dependencies = [
  "base64",
  "moenarch-geo-core",
@@ -1295,7 +1295,7 @@ dependencies = [
 [[package]]
 name = "three-d-animation"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=db9a53a4aaaad28d5bd0d3fad131fc151953e989#db9a53a4aaaad28d5bd0d3fad131fc151953e989"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=8fa2b4f3057d3479ee8166f34d83705e283012cd#8fa2b4f3057d3479ee8166f34d83705e283012cd"
 dependencies = [
  "three-d-core",
 ]
@@ -1303,7 +1303,7 @@ dependencies = [
 [[package]]
 name = "three-d-camera"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=db9a53a4aaaad28d5bd0d3fad131fc151953e989#db9a53a4aaaad28d5bd0d3fad131fc151953e989"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=8fa2b4f3057d3479ee8166f34d83705e283012cd#8fa2b4f3057d3479ee8166f34d83705e283012cd"
 dependencies = [
  "three-d-animation",
  "three-d-core",
@@ -1312,7 +1312,7 @@ dependencies = [
 [[package]]
 name = "three-d-core"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=db9a53a4aaaad28d5bd0d3fad131fc151953e989#db9a53a4aaaad28d5bd0d3fad131fc151953e989"
+source = "git+https://github.com/moritzbrantner/3d-lab.git?rev=8fa2b4f3057d3479ee8166f34d83705e283012cd#8fa2b4f3057d3479ee8166f34d83705e283012cd"
 
 [[package]]
 name = "tiny-keccak"
