@@ -44,8 +44,7 @@ pub fn build_save_render_frame_with_view(
 
 fn scenario_render_parts(scenario: &CityScenario) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let projection = GameWorldProjection::from_scenario(scenario);
-    let mut nodes = Vec::new();
-    let mut fit_points = Vec::new();
+    let (mut nodes, mut fit_points) = render_part_buffers(scenario);
 
     for road in &scenario.roads {
         append_road_nodes(
@@ -72,8 +71,7 @@ fn scenario_render_parts(scenario: &CityScenario) -> (Vec<RendererSceneNode>, Ve
 
 pub(super) fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
     let projection = GameWorldProjection::from_save(save);
-    let mut nodes = Vec::new();
-    let mut fit_points = Vec::new();
+    let (mut nodes, mut fit_points) = render_part_buffers(&save.scenario);
     let planning = &save.world.planning;
 
     // Rendering borrows planning semantics directly instead of materializing/cloning
@@ -104,6 +102,19 @@ pub(super) fn save_render_parts(save: &CitySave) -> (Vec<RendererSceneNode>, Vec
     }
 
     (nodes, fit_points)
+}
+
+/// Buffers sized for one node (eight fit points) per scenario entity, the common case; multi-segment
+/// roads and overlay entities grow them from there.
+fn render_part_buffers(scenario: &CityScenario) -> (Vec<RendererSceneNode>, Vec<Vec3>) {
+    let entities = scenario.roads.len()
+        + scenario.buildings.len()
+        + scenario.water.len()
+        + scenario.land_use_areas.len();
+    (
+        Vec::with_capacity(entities),
+        Vec::with_capacity(entities * 8),
+    )
 }
 
 fn finish_frame(

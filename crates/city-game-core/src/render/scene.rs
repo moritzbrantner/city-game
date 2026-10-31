@@ -1,3 +1,5 @@
+use core::fmt::Write as _;
+
 use geo_core::Geometry;
 use three_d_core::Vec3;
 
@@ -59,6 +61,7 @@ fn append_road_fit_points(
     if length <= f32::EPSILON {
         return;
     }
+    fit_points.reserve(8);
     let half_width = width * 0.5;
     let normal_x = -dz / length * half_width;
     let normal_z = dx / length * half_width;
@@ -93,7 +96,16 @@ pub(super) fn append_building_node(
 }
 
 pub(super) fn road_segment_node_id(road_id: &str, segment_index: usize) -> String {
-    format!("{road_id}/road-segment-{segment_index}")
+    // Sized exactly: this runs once per road segment per rebuilt frame.
+    const SEPARATOR: &str = "/road-segment-";
+    let digits = segment_index
+        .checked_ilog10()
+        .map_or(1, |log| log as usize + 1);
+    let mut id = String::with_capacity(road_id.len() + SEPARATOR.len() + digits);
+    id.push_str(road_id);
+    id.push_str(SEPARATOR);
+    write!(id, "{segment_index}").expect("writing to a String cannot fail");
+    id
 }
 
 pub(super) fn append_water_node(
@@ -192,6 +204,7 @@ fn append_axis_aligned_box_fit_points(
     translation: [f32; 3],
     size: [f32; 3],
 ) {
+    fit_points.reserve(8);
     let half = [size[0] * 0.5, size[1] * 0.5, size[2] * 0.5];
     for x_sign in [-1.0, 1.0] {
         for y_sign in [-1.0, 1.0] {
