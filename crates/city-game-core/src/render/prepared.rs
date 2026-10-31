@@ -1,11 +1,14 @@
 //! Disposable, constant-size camera preparation. Never persisted as city state.
 use serde::{Deserialize, Serialize};
 
-use super::{
-    CameraError, CitySave, OrthographicCamera, RenderFrameError, RenderView, RendererCamera,
-    RendererFrame, Vec3, apply_render_view, fit_orthographic_camera, renderer_frame,
-    save_render_parts,
-};
+use three_d_camera::{CameraError, OrthographicCamera};
+use three_d_core::Vec3;
+
+use super::camera::{apply_render_view, fit_orthographic_camera};
+use super::composition::save_render_parts;
+use super::frame::{RendererCamera, RendererFrame, renderer_frame};
+use super::view::{RenderFrameError, RenderView};
+use crate::CitySave;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
