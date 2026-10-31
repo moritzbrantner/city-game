@@ -25,14 +25,23 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
-use super::{
-    CameraError, CameraExtents, GameWorldProjection, GeographicBounds, OrthographicCamera,
-    RenderFrameError, RenderView, RendererCamera, RendererFrame, RendererSceneNode, Vec3,
-    append_building_node, append_land_use_node, append_road_nodes, append_water_node,
-    append_zone_node, apply_render_view, extend_geographic_bounds, overview_camera_from_extents,
-    overview_eye_distance, overview_orientation, renderer_camera, road_segment_node_id,
-    visit_positions, visit_scenario_positions,
+use three_d_camera::{CameraError, OrthographicCamera};
+use three_d_core::Vec3;
+
+use super::camera::{
+    CameraExtents, apply_render_view, overview_camera_from_extents, overview_eye_distance,
+    overview_orientation,
 };
+use super::frame::{RendererCamera, RendererFrame, RendererSceneNode, renderer_camera};
+use super::projection::{
+    GameWorldProjection, GeographicBounds, extend_geographic_bounds, visit_positions,
+    visit_scenario_positions,
+};
+use super::scene::{
+    append_building_node, append_land_use_node, append_road_nodes, append_water_node,
+    append_zone_node, road_segment_node_id,
+};
+use super::view::{RenderFrameError, RenderView};
 use crate::commands::RenderInvalidation;
 use crate::{CityRenderImpact, CitySave, PlannedRoad, PlannedZone};
 
