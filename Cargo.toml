@@ -20,5 +20,5 @@ osmpbfreader = "=0.19.1"
 serde = { version = "=1.0.229", features = ["derive"] }
 serde-json = { package = "serde_json", version = "=1.0.154" }
 sha2 = "=0.11.1"
-three-d-camera = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "fb85102248b55e0a3f767cfc6ffcd141f45e710c" }
-three-d-core = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "fb85102248b55e0a3f767cfc6ffcd141f45e710c" }
+three-d-camera = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "edfa62fe747e6bacc59be634259d1fdd2640fb35" }
+three-d-core = { git = "https://github.com/moritzbrantner/3d-lab.git", rev = "edfa62fe747e6bacc59be634259d1fdd2640fb35" }
