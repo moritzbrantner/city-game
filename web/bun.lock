@@ -5,12 +5,12 @@
     "": {
       "name": "city-game-foundation-web",
       "dependencies": {
-        "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#edfa62fe747e6bacc59be634259d1fdd2640fb35",
+        "@moritzbrantner/three-d-renderer": "github:moritzbrantner/3d-lab#6b04dc4bc16f9bcd65c1bc755254370012065e61",
       },
     },
   },
   "packages": {
-    "@moritzbrantner/three-d-renderer": ["@moritzbrantner/three-d-renderer@github:moritzbrantner/3d-lab#edfa62f", { "dependencies": { "three": "0.187.0" } }, "moritzbrantner-3d-lab-edfa62f", "sha512-TevnzciAuMzPW2QngDsAXY/7fsdJsGTGWOUGDJn+Cbe73i1dNqUyVTDWl3CLYpc1gBWf+0Eed2NUCKkbce/wpQ=="],
+    "@moritzbrantner/three-d-renderer": ["@moritzbrantner/three-d-renderer@github:moritzbrantner/3d-lab#6b04dc4", { "dependencies": { "three": "0.187.0" } }, "moritzbrantner-3d-lab-6b04dc4", "sha512-RY+l9JX9N2AQ36O7yueAVkzT72BPCJ/GXINk1wOS95WjUoiR/L+we0tWAnKQ0/9dCUOnLcAWjSRCr/lsPFq12A=="],
 
     "three": ["three@0.187.0", "", {}, "sha512-Qiu7R+Cmh8CstZsY1uJOSWnVlfo7ZtNLV7mF8Jltk3LB3AtDu9cRZlcnRKkAk8Y4z6KKw35z7Y7Urd7jWY8etA=="],
   }
