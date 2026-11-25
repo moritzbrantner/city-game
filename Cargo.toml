@@ -13,8 +13,8 @@ rust-version = "1.98"
 repository = "https://github.com/moritzbrantner/city-game"
 
 [workspace.dependencies]
-geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "81991da3d1b9630e83130d772b13cce614aa5821" }
-geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "81991da3d1b9630e83130d772b13cce614aa5821" }
+geo-core = { package = "moenarch-geo-core", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "e37cad75becb1bc0b7abdf47d01ee89436dbaee5" }
+geo-io-osm = { package = "moenarch-geo-io-osm", git = "https://github.com/moritzbrantner/geo-analysis.git", rev = "e37cad75becb1bc0b7abdf47d01ee89436dbaee5" }
 protobuf = "=3.7.2"
 osmpbfreader = "=0.19.1"
 serde = { version = "=1.0.229", features = ["derive"] }

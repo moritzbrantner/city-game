@@ -689,7 +689,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-core"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=81991da3d1b9630e83130d772b13cce614aa5821#81991da3d1b9630e83130d772b13cce614aa5821"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=e37cad75becb1bc0b7abdf47d01ee89436dbaee5#e37cad75becb1bc0b7abdf47d01ee89436dbaee5"
 dependencies = [
  "moritzbrantner-runtime-core",
  "serde",
@@ -699,7 +699,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-grid"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=81991da3d1b9630e83130d772b13cce614aa5821#81991da3d1b9630e83130d772b13cce614aa5821"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=e37cad75becb1bc0b7abdf47d01ee89436dbaee5#e37cad75becb1bc0b7abdf47d01ee89436dbaee5"
 dependencies = [
  "geo",
  "h3o",
@@ -710,7 +710,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-geojson"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=81991da3d1b9630e83130d772b13cce614aa5821#81991da3d1b9630e83130d772b13cce614aa5821"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=e37cad75becb1bc0b7abdf47d01ee89436dbaee5#e37cad75becb1bc0b7abdf47d01ee89436dbaee5"
 dependencies = [
  "geojson",
  "moenarch-geo-core",
@@ -723,7 +723,7 @@ dependencies = [
 [[package]]
 name = "moenarch-geo-io-osm"
 version = "0.1.0"
-source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=81991da3d1b9630e83130d772b13cce614aa5821#81991da3d1b9630e83130d772b13cce614aa5821"
+source = "git+https://github.com/moritzbrantner/geo-analysis.git?rev=e37cad75becb1bc0b7abdf47d01ee89436dbaee5#e37cad75becb1bc0b7abdf47d01ee89436dbaee5"
 dependencies = [
  "base64",
  "moenarch-geo-core",
